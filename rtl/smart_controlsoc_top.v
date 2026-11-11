@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module smart_controlsoc_top #(
-    // AXI4-Lite Parameters (Matching UART, SPI, I2C, PWM & Interconnect)
+    // AXI4-Lite Parameters (Matching UART, SPI, Seg7, PWM & Interconnect)
     parameter DATA_WIDTH = 32,
     parameter ADDR_WIDTH = 32,
     parameter STRB_WIDTH = (DATA_WIDTH/8),
@@ -22,10 +22,9 @@ module smart_controlsoc_top #(
     output wire        spi_mosi_o,
     input  wire        spi_miso_i,
 
-    // I2C External Pins
-    inout  wire        i2c_scl_io,
-    inout  wire        i2c_sda_io,
-    output wire        i2c_interrupt_o,
+    // Seven-Segment Display External Pins (Port M04: 0x4000_8000)
+    output wire [7:0]  seg7_seg_o,
+    output wire [7:0]  seg7_an_o,
 
     // PWM External Pin
     output wire        pwm_out_o,
@@ -35,32 +34,7 @@ module smart_controlsoc_top #(
     output wire        gpio_interrupt_o,
 
     // Timer External Interrupt Pin
-    output wire        timer_interrupt_o,
-
-    // DMA External CSR Slave Port
-    input  wire [ADDR_WIDTH-1:0] dma_csr_awaddr_i,
-    input  wire [2:0]            dma_csr_awprot_i,
-    input  wire                  dma_csr_awvalid_i,
-    output wire                  dma_csr_awready_o,
-    input  wire [DATA_WIDTH-1:0] dma_csr_wdata_i,
-    input  wire [STRB_WIDTH-1:0] dma_csr_wstrb_i,
-    input  wire                  dma_csr_wvalid_i,
-    output wire                  dma_csr_wready_o,
-    output wire [1:0]            dma_csr_bresp_o,
-    output wire                  dma_csr_bvalid_o,
-    input  wire                  dma_csr_bready_i,
-    input  wire [ADDR_WIDTH-1:0] dma_csr_araddr_i,
-    input  wire [2:0]            dma_csr_arprot_i,
-    input  wire                  dma_csr_arvalid_i,
-    output wire                  dma_csr_arready_o,
-    output wire [DATA_WIDTH-1:0] dma_csr_rdata_o,
-    output wire [1:0]            dma_csr_rresp_o,
-    output wire                  dma_csr_rvalid_o,
-    input  wire                  dma_csr_rready_i,
-
-    // DMA Interrupt Outputs
-    output wire                  dma_done_interrupt_o,
-    output wire                  dma_error_interrupt_o
+    output wire        timer_interrupt_o
 );
 
     // -------------------------------------------------------------------------
@@ -352,7 +326,7 @@ module smart_controlsoc_top #(
     wire                     m03_axi_rready;
 
     // -------------------------------------------------------------------------
-    // AXI Interconnect Master 4 (M04) <-> I2C Slave Wires
+    // AXI Interconnect Master 4 (M04) <-> Seven-Segment Display Slave Wires
     // -------------------------------------------------------------------------
     wire [ID_WIDTH-1:0]      m04_axi_awid;
     wire [ADDR_WIDTH-1:0]    m04_axi_awaddr;
@@ -430,49 +404,6 @@ module smart_controlsoc_top #(
     wire                     m05_axi_rready;
 
     // -------------------------------------------------------------------------
-    // DMA Controller Master <-> AXI Interconnect S01 Wires
-    // -------------------------------------------------------------------------
-    wire [ID_WIDTH-1:0]      s01_axi_awid;
-    wire [ADDR_WIDTH-1:0]    s01_axi_awaddr;
-    wire [7:0]               s01_axi_awlen;
-    wire [2:0]               s01_axi_awsize;
-    wire [1:0]               s01_axi_awburst;
-    wire                     s01_axi_awlock;
-    wire [3:0]               s01_axi_awcache;
-    wire [2:0]               s01_axi_awprot;
-    wire [3:0]               s01_axi_awqos;
-    wire [3:0]               s01_axi_awregion;
-    wire                     s01_axi_awvalid;
-    wire                     s01_axi_awready;
-    wire [DATA_WIDTH-1:0]    s01_axi_wdata;
-    wire [STRB_WIDTH-1:0]    s01_axi_wstrb;
-    wire                     s01_axi_wlast;
-    wire                     s01_axi_wvalid;
-    wire                     s01_axi_wready;
-    wire [ID_WIDTH-1:0]      s01_axi_bid;
-    wire [1:0]               s01_axi_bresp;
-    wire                     s01_axi_bvalid;
-    wire                     s01_axi_bready;
-    wire [ID_WIDTH-1:0]      s01_axi_arid;
-    wire [ADDR_WIDTH-1:0]    s01_axi_araddr;
-    wire [7:0]               s01_axi_arlen;
-    wire [2:0]               s01_axi_arsize;
-    wire [1:0]               s01_axi_arburst;
-    wire                     s01_axi_arlock;
-    wire [3:0]               s01_axi_arcache;
-    wire [2:0]               s01_axi_arprot;
-    wire [3:0]               s01_axi_arqos;
-    wire [3:0]               s01_axi_arregion;
-    wire                     s01_axi_arvalid;
-    wire                     s01_axi_arready;
-    wire [ID_WIDTH-1:0]      s01_axi_rid;
-    wire [DATA_WIDTH-1:0]    s01_axi_rdata;
-    wire [1:0]               s01_axi_rresp;
-    wire                     s01_axi_rlast;
-    wire                     s01_axi_rvalid;
-    wire                     s01_axi_rready;
-
-    // -------------------------------------------------------------------------
     // AXI Interconnect 2x6 Instantiation
     // -------------------------------------------------------------------------
     axi_interconnect_wrap_2x6 #(
@@ -493,7 +424,7 @@ module smart_controlsoc_top #(
         .M03_BASE_ADDR  (32'h4000_6000), // SPI Controller Base Address (4KB)
         .M03_ADDR_WIDTH (32'd12),
         
-        .M04_BASE_ADDR  (32'h4000_8000), // I2C Controller Base Address (4KB)
+        .M04_BASE_ADDR  (32'h4000_8000), // Seven-Segment Display Base Address (4KB)
         .M04_ADDR_WIDTH (32'd12),
         
         .M05_BASE_ADDR  (32'h4000_A000), // PWM Generator Base Address (4KB)
@@ -539,49 +470,49 @@ module smart_controlsoc_top #(
         .s00_axi_rvalid (s00_axi_rvalid),
         .s00_axi_rready (s00_axi_rready),
         
-        // Slave 01 Port <- DMA Controller Master
-        .s01_axi_awid   (s01_axi_awid),
-        .s01_axi_awaddr (s01_axi_awaddr),
-        .s01_axi_awlen  (s01_axi_awlen),
-        .s01_axi_awsize (s01_axi_awsize),
-        .s01_axi_awburst(s01_axi_awburst),
-        .s01_axi_awlock (s01_axi_awlock),
-        .s01_axi_awcache(s01_axi_awcache),
-        .s01_axi_awprot (s01_axi_awprot),
-        .s01_axi_awqos  (s01_axi_awqos),
+        // Slave 01 Port (Unused - Tied Off)
+        .s01_axi_awid   ({ID_WIDTH{1'b0}}),
+        .s01_axi_awaddr ({ADDR_WIDTH{1'b0}}),
+        .s01_axi_awlen  (8'h00),
+        .s01_axi_awsize (3'b000),
+        .s01_axi_awburst(2'b00),
+        .s01_axi_awlock (1'b0),
+        .s01_axi_awcache(4'h0),
+        .s01_axi_awprot (3'b000),
+        .s01_axi_awqos  (4'h0),
         .s01_axi_awuser (1'b0),
-        .s01_axi_awvalid(s01_axi_awvalid),
-        .s01_axi_awready(s01_axi_awready),
-        .s01_axi_wdata  (s01_axi_wdata),
-        .s01_axi_wstrb  (s01_axi_wstrb),
-        .s01_axi_wlast  (s01_axi_wlast),
+        .s01_axi_awvalid(1'b0),
+        .s01_axi_awready(),
+        .s01_axi_wdata  ({DATA_WIDTH{1'b0}}),
+        .s01_axi_wstrb  ({STRB_WIDTH{1'b0}}),
+        .s01_axi_wlast  (1'b0),
         .s01_axi_wuser  (1'b0),
-        .s01_axi_wvalid (s01_axi_wvalid),
-        .s01_axi_wready (s01_axi_wready),
-        .s01_axi_bid    (s01_axi_bid),
-        .s01_axi_bresp  (s01_axi_bresp),
+        .s01_axi_wvalid (1'b0),
+        .s01_axi_wready (),
+        .s01_axi_bid    (),
+        .s01_axi_bresp  (),
         .s01_axi_buser  (),
-        .s01_axi_bvalid (s01_axi_bvalid),
-        .s01_axi_bready (s01_axi_bready),
-        .s01_axi_arid   (s01_axi_arid),
-        .s01_axi_araddr (s01_axi_araddr),
-        .s01_axi_arlen  (s01_axi_arlen),
-        .s01_axi_arsize (s01_axi_arsize),
-        .s01_axi_arburst(s01_axi_arburst),
-        .s01_axi_arlock (s01_axi_arlock),
-        .s01_axi_arcache(s01_axi_arcache),
-        .s01_axi_arprot (s01_axi_arprot),
-        .s01_axi_arqos  (s01_axi_arqos),
+        .s01_axi_bvalid (),
+        .s01_axi_bready (1'b0),
+        .s01_axi_arid   ({ID_WIDTH{1'b0}}),
+        .s01_axi_araddr ({ADDR_WIDTH{1'b0}}),
+        .s01_axi_arlen  (8'h00),
+        .s01_axi_arsize (3'b000),
+        .s01_axi_arburst(2'b00),
+        .s01_axi_arlock (1'b0),
+        .s01_axi_arcache(4'h0),
+        .s01_axi_arprot (3'b000),
+        .s01_axi_arqos  (4'h0),
         .s01_axi_aruser (1'b0),
-        .s01_axi_arvalid(s01_axi_arvalid),
-        .s01_axi_arready(s01_axi_arready),
-        .s01_axi_rid    (s01_axi_rid),
-        .s01_axi_rdata  (s01_axi_rdata),
-        .s01_axi_rresp  (s01_axi_rresp),
-        .s01_axi_rlast  (s01_axi_rlast),
+        .s01_axi_arvalid(1'b0),
+        .s01_axi_arready(),
+        .s01_axi_rid    (),
+        .s01_axi_rdata  (),
+        .s01_axi_rresp  (),
+        .s01_axi_rlast  (),
         .s01_axi_ruser  (),
-        .s01_axi_rvalid (s01_axi_rvalid),
-        .s01_axi_rready (s01_axi_rready),
+        .s01_axi_rvalid (),
+        .s01_axi_rready (1'b0),
         
         // Master 00 Port -> UART (0x4000_0000)
         .m00_axi_awid   (m00_axi_awid),
@@ -731,7 +662,7 @@ module smart_controlsoc_top #(
         .m03_axi_rvalid (m03_axi_rvalid),
         .m03_axi_rready (m03_axi_rready),
 
-        // Master 04 Port -> I2C Controller (0x4000_8000)
+        // Master 04 Port -> Seven-Segment Display (0x4000_8000)
         .m04_axi_awid   (m04_axi_awid),
         .m04_axi_awaddr (m04_axi_awaddr),
         .m04_axi_awlen  (m04_axi_awlen),
@@ -902,53 +833,51 @@ module smart_controlsoc_top #(
     assign m03_axi_rlast = 1'b1;
 
     // -------------------------------------------------------------------------
-    // I2C Controller IP Instantiation (0x4000_8000)
+    // Seven-Segment Display Controller IP Instantiation (0x4000_8000)
     // -------------------------------------------------------------------------
-    axi_i2c_top #(
+    axi_seg7_top #(
         .DATA_WIDTH (DATA_WIDTH),
-        .ADDR_WIDTH (ADDR_WIDTH),
-        .ID_WIDTH   (ID_WIDTH)
-    ) i2c_ip_inst (
-        .axi_aclk    (sys_clk),
-        .axi_aresetn (sys_rst_n),
-        
+        .ADDR_WIDTH (12)
+    ) seg7_ip_inst (
+        .clk           (sys_clk),
+        .rst_n         (sys_rst_n),
+
         // AW Channel
-        .axi_awid    (m04_axi_awid),
-        .axi_awaddr  (m04_axi_awaddr),
-        .axi_awvalid (m04_axi_awvalid),
-        .axi_awready (m04_axi_awready),
-        
+        .s_axi_awaddr  (m04_axi_awaddr[11:0]),
+        .s_axi_awprot  (m04_axi_awprot),
+        .s_axi_awvalid (m04_axi_awvalid),
+        .s_axi_awready (m04_axi_awready),
+
         // W Channel
-        .axi_wdata   (m04_axi_wdata),
-        .axi_wstrb   (m04_axi_wstrb),
-        .axi_wvalid  (m04_axi_wvalid),
-        .axi_wready  (m04_axi_wready),
-        
+        .s_axi_wdata   (m04_axi_wdata),
+        .s_axi_wstrb   (m04_axi_wstrb),
+        .s_axi_wvalid  (m04_axi_wvalid),
+        .s_axi_wready  (m04_axi_wready),
+
         // B Channel
-        .axi_bid     (m04_axi_bid),
-        .axi_bresp   (m04_axi_bresp),
-        .axi_bvalid  (m04_axi_bvalid),
-        .axi_bready  (m04_axi_bready),
-        
+        .s_axi_bresp   (m04_axi_bresp),
+        .s_axi_bvalid  (m04_axi_bvalid),
+        .s_axi_bready  (m04_axi_bready),
+
         // AR Channel
-        .axi_arid    (m04_axi_arid),
-        .axi_araddr  (m04_axi_araddr),
-        .axi_arvalid (m04_axi_arvalid),
-        .axi_arready (m04_axi_arready),
-        
+        .s_axi_araddr  (m04_axi_araddr[11:0]),
+        .s_axi_arprot  (m04_axi_arprot),
+        .s_axi_arvalid (m04_axi_arvalid),
+        .s_axi_arready (m04_axi_arready),
+
         // R Channel
-        .axi_rid     (m04_axi_rid),
-        .axi_rdata   (m04_axi_rdata),
-        .axi_rresp   (m04_axi_rresp),
-        .axi_rvalid  (m04_axi_rvalid),
-        .axi_rready  (m04_axi_rready),
-        
-        // External Interfaces
-        .i2c_scl_io  (i2c_scl_io),
-        .i2c_sda_io  (i2c_sda_io),
-        .i2c_irq_o   (i2c_interrupt_o)
+        .s_axi_rdata   (m04_axi_rdata),
+        .s_axi_rresp   (m04_axi_rresp),
+        .s_axi_rvalid  (m04_axi_rvalid),
+        .s_axi_rready  (m04_axi_rready),
+
+        // External Seven-Segment Display Pins
+        .seg_o         (seg7_seg_o),
+        .an_o          (seg7_an_o)
     );
 
+    assign m04_axi_bid   = {ID_WIDTH{1'b0}};
+    assign m04_axi_rid   = {ID_WIDTH{1'b0}};
     assign m04_axi_rlast = 1'b1;
 
     // -------------------------------------------------------------------------
@@ -1096,93 +1025,5 @@ module smart_controlsoc_top #(
     );
 
     assign m02_axi_rlast = 1'b1;
-
-    // -------------------------------------------------------------------------
-    // DMA Controller IP Instantiation (Master to Interconnect S01)
-    // -------------------------------------------------------------------------
-    axi_dma_top #(
-        .DATA_WIDTH (DATA_WIDTH),
-        .ADDR_WIDTH (ADDR_WIDTH),
-        .STRB_WIDTH (STRB_WIDTH),
-        .ID_WIDTH   (ID_WIDTH),
-        .DMA_ID_VAL (1)
-    ) dma_ip_inst (
-        .axi_aclk             (sys_clk),
-        .axi_aresetn          (sys_rst_n),
-
-        // CSR Slave Interface
-        .s_axil_csr_awaddr    (dma_csr_awaddr_i),
-        .s_axil_csr_awprot    (dma_csr_awprot_i),
-        .s_axil_csr_awvalid   (dma_csr_awvalid_i),
-        .s_axil_csr_awready   (dma_csr_awready_o),
-
-        .s_axil_csr_wdata     (dma_csr_wdata_i),
-        .s_axil_csr_wstrb     (dma_csr_wstrb_i),
-        .s_axil_csr_wvalid    (dma_csr_wvalid_i),
-        .s_axil_csr_wready    (dma_csr_wready_o),
-
-        .s_axil_csr_bresp     (dma_csr_bresp_o),
-        .s_axil_csr_bvalid    (dma_csr_bvalid_o),
-        .s_axil_csr_bready    (dma_csr_bready_i),
-
-        .s_axil_csr_araddr    (dma_csr_araddr_i),
-        .s_axil_csr_arprot    (dma_csr_arprot_i),
-        .s_axil_csr_arvalid   (dma_csr_arvalid_i),
-        .s_axil_csr_arready   (dma_csr_arready_o),
-
-        .s_axil_csr_rdata     (dma_csr_rdata_o),
-        .s_axil_csr_rresp     (dma_csr_rresp_o),
-        .s_axil_csr_rvalid    (dma_csr_rvalid_o),
-        .s_axil_csr_rready    (dma_csr_rready_i),
-
-        // AXI4 Master Interface -> Interconnect S01
-        .m_axi_awid           (s01_axi_awid),
-        .m_axi_awaddr         (s01_axi_awaddr),
-        .m_axi_awlen          (s01_axi_awlen),
-        .m_axi_awsize         (s01_axi_awsize),
-        .m_axi_awburst        (s01_axi_awburst),
-        .m_axi_awlock         (s01_axi_awlock),
-        .m_axi_awcache        (s01_axi_awcache),
-        .m_axi_awprot         (s01_axi_awprot),
-        .m_axi_awqos          (s01_axi_awqos),
-        .m_axi_awregion       (s01_axi_awregion),
-        .m_axi_awvalid        (s01_axi_awvalid),
-        .m_axi_awready        (s01_axi_awready),
-
-        .m_axi_wdata          (s01_axi_wdata),
-        .m_axi_wstrb          (s01_axi_wstrb),
-        .m_axi_wlast          (s01_axi_wlast),
-        .m_axi_wvalid         (s01_axi_wvalid),
-        .m_axi_wready         (s01_axi_wready),
-
-        .m_axi_bid            (s01_axi_bid),
-        .m_axi_bresp          (s01_axi_bresp),
-        .m_axi_bvalid         (s01_axi_bvalid),
-        .m_axi_bready         (s01_axi_bready),
-
-        .m_axi_arid           (s01_axi_arid),
-        .m_axi_araddr         (s01_axi_araddr),
-        .m_axi_arlen          (s01_axi_arlen),
-        .m_axi_arsize         (s01_axi_arsize),
-        .m_axi_arburst        (s01_axi_arburst),
-        .m_axi_arlock         (s01_axi_arlock),
-        .m_axi_arcache        (s01_axi_arcache),
-        .m_axi_arprot         (s01_axi_arprot),
-        .m_axi_arqos          (s01_axi_arqos),
-        .m_axi_arregion       (s01_axi_arregion),
-        .m_axi_arvalid        (s01_axi_arvalid),
-        .m_axi_arready        (s01_axi_arready),
-
-        .m_axi_rid            (s01_axi_rid),
-        .m_axi_rdata          (s01_axi_rdata),
-        .m_axi_rresp          (s01_axi_rresp),
-        .m_axi_rlast          (s01_axi_rlast),
-        .m_axi_rvalid         (s01_axi_rvalid),
-        .m_axi_rready         (s01_axi_rready),
-
-        // Interrupts
-        .dma_done_o           (dma_done_interrupt_o),
-        .dma_error_o          (dma_error_interrupt_o)
-    );
 
 endmodule

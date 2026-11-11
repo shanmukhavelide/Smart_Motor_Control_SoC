@@ -11,9 +11,8 @@
 #define TIMER_BASE              0x40004000U // Port M01: Hardware 64-bit Timer (4KB)
 #define GPIO_BASE               0x40002000U // Port M02: 32-bit GPIO Controller (4KB)
 #define SPI_BASE                0x40006000U // Port M03: SPI Controller (4KB)
-#define I2C_BASE                0x40008000U // Port M04: I2C Master Controller (4KB)
+#define SEG7_BASE               0x40008000U // Port M04: Seven-Segment Display Controller (4KB)
 #define PWM_BASE                0x4000A000U // Port M05: PWM Generator (4KB)
-#define DMA_CSR_BASE            0x4000C000U // DMA AXI4-Lite CSR Port (4KB)
 
 // =============================================================================
 // 1. UART Peripheral Register Offsets (Port M00)
@@ -69,34 +68,24 @@
 #define SPI_REG_SSR             (SPI_BASE + 0x70U) // Slave Select Register
 
 // =============================================================================
-// 5. I2C Controller Register Offsets (Port M04)
+// 5. Seven-Segment Display Controller Register Offsets (Port M04)
 // =============================================================================
-#define I2C_REG_PRER_LO         (I2C_BASE + 0x00U) // Clock prescaler low byte
-#define I2C_REG_PRER_HI         (I2C_BASE + 0x04U) // Clock prescaler high byte
-#define I2C_REG_CTR             (I2C_BASE + 0x08U) // Control Register (Bit 7: EN)
-#define I2C_REG_TXR_RXR         (I2C_BASE + 0x0CU) // Transmit/Receive data
-#define I2C_REG_CR_SR           (I2C_BASE + 0x10U) // Command / Status
+#define SEG7_REG_DATA           (SEG7_BASE + 0x00U) // 8 nibbles; digit n = bits [4n+3:4n]
+#define SEG7_REG_CTRL           (SEG7_BASE + 0x04U) // [0] EN, [1] SEG_ACTIVE_LOW, [2] AN_ACTIVE_LOW, [15:8] DIGIT_MASK
+#define SEG7_REG_DP             (SEG7_BASE + 0x08U) // [7:0] Decimal point per digit (1 = on)
+#define SEG7_REG_REFRESH_DIV    (SEG7_BASE + 0x0CU) // [15:0] Clock cycles each digit stays enabled
+
+// SEG_CTRL Bitfield Masks
+#define SEG7_CTRL_EN            (1U << 0)
+#define SEG7_CTRL_SEG_ACT_LOW   (1U << 1)
+#define SEG7_CTRL_AN_ACT_LOW    (1U << 2)
+#define SEG7_CTRL_MASK_SHIFT    8U
+#define SEG7_CTRL_MASK_ALL      (0xFFU << SEG7_CTRL_MASK_SHIFT)
 
 // =============================================================================
 // 6. PWM Generator Register Offsets (Port M05)
 // =============================================================================
 #define PWM_REG_DUTY            (PWM_BASE + 0x00U) // Duty cycle control register
-
-// =============================================================================
-// 7. DMA Controller Register Offsets (AXI4-Lite CSR)
-// =============================================================================
-#define DMA_REG_CONTROL         (DMA_CSR_BASE + 0x00U) // [0] go, [1] abort, [9:2] max_burst
-#define DMA_REG_STATUS          (DMA_CSR_BASE + 0x08U) // [15:0] version 0xCAFE, [16] done, [17] err
-#define DMA_REG_ERROR_ADDR      (DMA_CSR_BASE + 0x10U) // Error address
-#define DMA_REG_ERROR_STATS     (DMA_CSR_BASE + 0x18U) // Error stats
-#define DMA_REG_DESC0_SRC       (DMA_CSR_BASE + 0x20U) // Descriptor 0 Source
-#define DMA_REG_DESC1_SRC       (DMA_CSR_BASE + 0x28U) // Descriptor 1 Source
-#define DMA_REG_DESC0_DST       (DMA_CSR_BASE + 0x30U) // Descriptor 0 Destination
-#define DMA_REG_DESC1_DST       (DMA_CSR_BASE + 0x38U) // Descriptor 1 Destination
-#define DMA_REG_DESC0_LEN       (DMA_CSR_BASE + 0x40U) // Descriptor 0 Byte Count
-#define DMA_REG_DESC1_LEN       (DMA_CSR_BASE + 0x48U) // Descriptor 1 Byte Count
-#define DMA_REG_DESC0_CFG       (DMA_CSR_BASE + 0x50U) // Descriptor 0 Config
-#define DMA_REG_DESC1_CFG       (DMA_CSR_BASE + 0x58U) // Descriptor 1 Config
 
 // =============================================================================
 // MMIO Low-Level Access Primitives

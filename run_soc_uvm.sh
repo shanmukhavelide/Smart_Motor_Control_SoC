@@ -21,7 +21,7 @@ EXTRA_ARGS=()
 for arg in "$@"; do
     if [[ "$arg" == +UVM_TESTNAME=* ]]; then
         TEST_NAME="${arg#+UVM_TESTNAME=}"
-    elif [[ "$arg" == "soc_test" || "$arg" == "uart_connectivity_test" || "$arg" == "gpio_test" || "$arg" == "i2c_test" || "$arg" == "pwm_test" || "$arg" == "spi_test" ]]; then
+    elif [[ "$arg" == "soc_test" || "$arg" == "uart_connectivity_test" || "$arg" == "gpio_test" || "$arg" == "pwm_test" || "$arg" == "spi_test" ]]; then
         TEST_NAME="$arg"
     else
         EXTRA_ARGS+=("$arg")

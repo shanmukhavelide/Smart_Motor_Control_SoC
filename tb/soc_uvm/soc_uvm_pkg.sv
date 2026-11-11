@@ -28,7 +28,7 @@ package soc_uvm_pkg;
     `include "soc_test.sv"
     `include "uart_connectivity_test.sv"
     `include "gpio_test.sv"
-    `include "i2c_test.sv"
+    // `include "i2c_test.sv" // Disabled: I2C IP replaced by Seven-Segment on Port M04
     `include "pwm_test.sv"
     `include "spi_test.sv"
 

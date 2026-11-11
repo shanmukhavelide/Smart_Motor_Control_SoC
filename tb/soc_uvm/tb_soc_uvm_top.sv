@@ -50,27 +50,18 @@ module tb_soc_uvm_top;
     // CPU Bus Functional Model (BFM) Interface (wraps VeeR CPU LSU AXI tasks)
     cpu_bfm_if  cpu_vif  (.clk(sys_clk), .rst_n(sys_rst_n));
 
-    // Open-drain pull-ups for I2C bus (SCL & SDA)
+    // Open-drain pull-ups for I2C VIP interface (retained for existing UVM env)
     pullup (i2c_vif.i2c_scl_io);
     pullup (i2c_vif.i2c_sda_io);
 
-    // I2C Slave Model (reused from rtl/i2c_directory/tb/i2c_slave_model.v)
-    i2c_slave_model #(
-        .I2C_ADR(7'b001_0000)
-    ) i2c_slave_inst (
-        .scl(i2c_vif.i2c_scl_io),
-        .sda(i2c_vif.i2c_sda_io)
-    );
-
     // -------------------------------------------------------------------------
-    // Top-Level Interrupt & Interconnect Wires
+    // Top-Level Interrupt & Peripheral Wires
     // -------------------------------------------------------------------------
-    wire uart_interrupt_o;
-    wire gpio_interrupt_o;
-    wire i2c_interrupt_o;
-    wire timer_interrupt_o;
-    wire dma_done_interrupt_o;
-    wire dma_error_interrupt_o;
+    wire       uart_interrupt_o;
+    wire       gpio_interrupt_o;
+    wire       timer_interrupt_o;
+    wire [7:0] seg7_seg_o;
+    wire [7:0] seg7_an_o;
 
     assign uart_interrupt_o = uart_vif.uart_interrupt_o;
 
@@ -97,10 +88,9 @@ module tb_soc_uvm_top;
         .spi_mosi_o          (spi_vif.spi_mosi_o),
         .spi_miso_i          (spi_vif.spi_miso_i),
 
-        // I2C External Pins -> I2C VIP Interface
-        .i2c_scl_io          (i2c_vif.i2c_scl_io),
-        .i2c_sda_io          (i2c_vif.i2c_sda_io),
-        .i2c_interrupt_o     (i2c_interrupt_o),
+        // Seven-Segment Display External Pins (Port M04: 0x4000_8000)
+        .seg7_seg_o          (seg7_seg_o),
+        .seg7_an_o           (seg7_an_o),
 
         // PWM External Pin -> PWM VIP Interface
         .pwm_out_o           (pwm_vif.pwm_out_o),
@@ -110,32 +100,7 @@ module tb_soc_uvm_top;
         .gpio_interrupt_o    (gpio_interrupt_o),
 
         // Hardware Timer External Interrupt Pin
-        .timer_interrupt_o   (timer_interrupt_o),
-
-        // DMA Dedicated AXI4-Lite CSR Port (Safe Tie-offs for External Slave Port)
-        .dma_csr_awaddr_i    ({ADDR_WIDTH{1'b0}}),
-        .dma_csr_awprot_i    (3'b000),
-        .dma_csr_awvalid_i   (1'b0),
-        .dma_csr_awready_o   (),
-        .dma_csr_wdata_i     ({DATA_WIDTH{1'b0}}),
-        .dma_csr_wstrb_i     ({STRB_WIDTH{1'b0}}),
-        .dma_csr_wvalid_i    (1'b0),
-        .dma_csr_wready_o    (),
-        .dma_csr_bresp_o     (),
-        .dma_csr_bvalid_o    (),
-        .dma_csr_bready_i    (1'b1),
-        .dma_csr_araddr_i    ({ADDR_WIDTH{1'b0}}),
-        .dma_csr_arprot_i    (3'b000),
-        .dma_csr_arvalid_i   (1'b0),
-        .dma_csr_arready_o   (),
-        .dma_csr_rdata_o     (),
-        .dma_csr_rresp_o     (),
-        .dma_csr_rvalid_o    (),
-        .dma_csr_rready_i    (1'b1),
-
-        // DMA Interrupts
-        .dma_done_interrupt_o(dma_done_interrupt_o),
-        .dma_error_interrupt_o(dma_error_interrupt_o)
+        .timer_interrupt_o   (timer_interrupt_o)
     );
 
     // -------------------------------------------------------------------------

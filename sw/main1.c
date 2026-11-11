@@ -8,10 +8,8 @@
  *                 - Port M01: Hardware 64-bit Timer (0x4000_4000)
  *                 - Port M02: 32-bit GPIO Controller (0x4000_2000)
  *                 - Port M03: SPI Controller (0x4000_6000)
- *                 - Port M04: I2C Master Controller (0x4000_8000)
+ *                 - Port M04: Seven-Segment Display Controller (0x4000_8000)
  *                 - Port M05: PWM Generator (0x4000_A000)
- *                 - Dedicated: DMA Controller CSR Port (0x4000_C000)
- *                 - Port S01: DMA Autonomous Bus Master Interface
  * =============================================================================
  */
 
@@ -52,12 +50,11 @@ uint32_t host_mmio_read(uint32_t addr) {
     if (addr == GPIO_REG_INFO) {
         return 0x00000820U; // Version 2, 32 GPIO pins
     }
-    if (addr == DMA_REG_STATUS) {
-        uint32_t val = *get_mock_ptr(addr);
-        return (val & 0xFFFF0000U) | 0xCAFEU; // Version signature
-    }
     if (addr == SPI_REG_SR) {
         return 0x00000005U; // TX and RX empty
+    }
+    if (addr >= (SEG7_BASE + 0x10U) && addr < (SEG7_BASE + 0x1000U)) {
+        return 0x00000000U; // Undefined Seg7 offsets read as 0
     }
     return *get_mock_ptr(addr);
 }
@@ -86,13 +83,8 @@ void host_mmio_write(uint32_t addr, uint32_t data) {
         *get_mock_ptr(TIMER_REG_INTR_STATE0) |= data;
         return;
     }
-    if (addr == DMA_REG_CONTROL && (data & 0x1U)) {
-        // Simulate DMA transfer completion: copy from SRC to DST
-        uint32_t src = *get_mock_ptr(DMA_REG_DESC0_SRC);
-        uint32_t dst = *get_mock_ptr(DMA_REG_DESC0_DST);
-        uint32_t val = host_mmio_read(src);
-        host_mmio_write(dst, val);
-        *get_mock_ptr(DMA_REG_STATUS) = (1U << 16) | 0xCAFEU; // done=1, version=0xCAFE
+    if (addr >= (SEG7_BASE + 0x10U) && addr < (SEG7_BASE + 0x1000U)) {
+        return; // Writes to undefined Seg7 offsets are ignored
     }
     *get_mock_ptr(addr) = data;
 }
@@ -101,7 +93,10 @@ static void init_mock_hardware(void) {
     for (uint32_t i = 0; i < MOCK_MEM_SIZE; i++) mock_mem[i] = 0;
     host_mmio_write(TIMER_REG_CTRL, 0x00000000U);
     host_mmio_write(TIMER_REG_V_LOWER0, 0x00000000U);
-    host_mmio_write(I2C_REG_PRER_LO, 0x000000FFU);
+    host_mmio_write(SEG7_REG_DATA, 0x00000000U);
+    host_mmio_write(SEG7_REG_CTRL, 0x0000FF06U);
+    host_mmio_write(SEG7_REG_DP, 0x00000000U);
+    host_mmio_write(SEG7_REG_REFRESH_DIV, 0x000003E8U);
     host_mmio_write(PWM_REG_DUTY, 0x00000000U);
 }
 #endif
@@ -232,24 +227,70 @@ static void test_spi_controller(void) {
 }
 
 // =============================================================================
-// TEST 5: I2C Master Controller Verification (Port M04: 0x4000_8000)
+// TEST 5: Seven-Segment Display Controller Verification (Port M04: 0x4000_8000)
 // =============================================================================
-static void test_i2c_controller(void) {
-    printf("\n--- [TEST 5] AXI I2C Controller MMIO Verification ---\n");
+static void test_seg7_controller(void) {
+    printf("\n--- [TEST 5] AXI Seven-Segment Display Controller Demonstration ---\n");
 
-    // 5.1 Check default clock prescaler (0xFF after reset)
-    uint32_t prer_lo = mmio_read32(I2C_REG_PRER_LO);
-    TEST_ASSERT((prer_lo & 0xFFU) == 0xFFU, "I2C Clock Prescaler PRER_LO default = 0xFF");
+    // 5.1 Verify reset defaults per seg7_spec.md
+    TEST_ASSERT(mmio_read32(SEG7_REG_DATA) == 0x00000000U,
+                "SEG_DATA default = 0x00000000");
+    TEST_ASSERT(mmio_read32(SEG7_REG_CTRL) == 0x0000FF06U,
+                "SEG_CTRL default = 0x0000FF06 (EN=0, active-low seg/an, mask=0xFF)");
+    TEST_ASSERT(mmio_read32(SEG7_REG_DP) == 0x00000000U,
+                "SEG_DP default = 0x00000000");
+    TEST_ASSERT(mmio_read32(SEG7_REG_REFRESH_DIV) == 0x000003E8U,
+                "SEG_REFRESH_DIV default = 0x000003E8 (1000 clocks)");
 
-    // 5.2 Program custom prescaler
-    mmio_write32(I2C_REG_PRER_LO, 0x00000064U);
-    prer_lo = mmio_read32(I2C_REG_PRER_LO);
-    TEST_ASSERT((prer_lo & 0xFFU) == 0x64U, "I2C Clock Prescaler PRER_LO programmed = 0x64");
+    // 5.2 Configure scan refresh divider (e.g. 100 clock cycles per digit)
+    mmio_write32(SEG7_REG_REFRESH_DIV, 0x00000064U);
+    uint32_t refresh_div = mmio_read32(SEG7_REG_REFRESH_DIV);
+    TEST_ASSERT(refresh_div == 0x00000064U,
+                "SEG_REFRESH_DIV configured = 0x00000064 (100 clocks/digit)");
 
-    // 5.3 Enable I2C Core (CTR[7] = 1)
-    mmio_write32(I2C_REG_CTR, 0x00000080U);
-    uint32_t ctr = mmio_read32(I2C_REG_CTR);
-    TEST_ASSERT((ctr & 0x80U) == 0x80U, "I2C Core Enable bit verified in Control Register");
+    // 5.3 Write 8 hexadecimal digits to SEG_DATA (Digit 0 = 4 .. Digit 7 = C)
+    mmio_write32(SEG7_REG_DATA, 0xCAFE1234U);
+    uint32_t seg_data = mmio_read32(SEG7_REG_DATA);
+    TEST_ASSERT(seg_data == 0xCAFE1234U,
+                "SEG_DATA programmed with hex pattern 0xCAFE1234");
+
+    // 5.4 Configure decimal points on even digits (digits 0, 2, 4, 6 -> 0x55)
+    mmio_write32(SEG7_REG_DP, 0x00000055U);
+    uint32_t seg_dp = mmio_read32(SEG7_REG_DP);
+    TEST_ASSERT((seg_dp & 0xFFU) == 0x55U,
+                "SEG_DP configured = 0x55 (decimal points on digits 0,2,4,6)");
+
+    // 5.5 Demonstrate digit masking + display enable: enable lower 4 digits (mask=0x0F, EN=1)
+    uint32_t ctrl_masked = (0x0FU << SEG7_CTRL_MASK_SHIFT) |
+                           SEG7_CTRL_AN_ACT_LOW | SEG7_CTRL_SEG_ACT_LOW | SEG7_CTRL_EN;
+    mmio_write32(SEG7_REG_CTRL, ctrl_masked);
+    uint32_t ctrl = mmio_read32(SEG7_REG_CTRL);
+    TEST_ASSERT(ctrl == 0x00000F07U,
+                "SEG_CTRL enabled with partial digit mask (0x0F -> digits 0..3 shown)");
+
+    // 5.6 Demonstrate enabling all 8 digits (mask=0xFF, EN=1)
+    uint32_t ctrl_all = SEG7_CTRL_MASK_ALL |
+                        SEG7_CTRL_AN_ACT_LOW | SEG7_CTRL_SEG_ACT_LOW | SEG7_CTRL_EN;
+    mmio_write32(SEG7_REG_CTRL, ctrl_all);
+    ctrl = mmio_read32(SEG7_REG_CTRL);
+    TEST_ASSERT(ctrl == 0x0000FF07U,
+                "SEG_CTRL enabled with all 8 digits unmasked (0x0000FF07)");
+
+    // 5.7 Demonstrate blanking display (EN=0) then re-enabling (EN=1)
+    mmio_write32(SEG7_REG_CTRL, ctrl_all & ~SEG7_CTRL_EN);
+    ctrl = mmio_read32(SEG7_REG_CTRL);
+    TEST_ASSERT((ctrl & SEG7_CTRL_EN) == 0U,
+                "SEG_CTRL display disabled (EN=0 blanks all digits)");
+
+    mmio_write32(SEG7_REG_CTRL, ctrl_all);
+    ctrl = mmio_read32(SEG7_REG_CTRL);
+    TEST_ASSERT((ctrl & SEG7_CTRL_EN) == SEG7_CTRL_EN,
+                "SEG_CTRL display re-enabled (EN=1)");
+
+    // 5.8 Verify writes to undefined offset are ignored and reads return 0
+    mmio_write32(SEG7_BASE + 0x10U, 0xDEADBEEFU);
+    TEST_ASSERT(mmio_read32(SEG7_BASE + 0x10U) == 0x00000000U,
+                "SEG7 undefined offset 0x10 write ignored / readback == 0");
 }
 
 // =============================================================================
@@ -274,70 +315,27 @@ static void test_pwm_generator(void) {
 }
 
 // =============================================================================
-// TEST 7: DMA Controller & Bus Master Interconnect Verification (Port S01)
-// =============================================================================
-static void test_dma_controller(void) {
-    printf("\n--- [TEST 7] DMA Controller & S01 Master Interconnect Verification ---\n");
-
-    // 7.1 Verify DMA Hardware Version Signature (0xCAFE)
-    uint32_t dma_status = mmio_read32(DMA_REG_STATUS);
-    TEST_ASSERT((dma_status & 0xFFFFU) == 0xCAFEU, "DMA Version Signature verified (0xCAFE)");
-
-    // 7.2 Prepare Source Data in PWM register (0x4000_A000)
-    mmio_write32(PWM_REG_DUTY, 0x12345678U);
-    uint32_t pwm_src = mmio_read32(PWM_REG_DUTY);
-    TEST_ASSERT(pwm_src == 0x12345678U, "Source register (PWM Duty) loaded with test pattern 0x12345678");
-
-    // 7.3 Clear Destination Data in GPIO_OUT register (0x4000_2180)
-    mmio_write32(GPIO_REG_OUT, 0x00000000U);
-    uint32_t gpio_dst = mmio_read32(GPIO_REG_OUT);
-    TEST_ASSERT(gpio_dst == 0x00000000U, "Destination register (GPIO_OUT) cleared to 0x00000000");
-
-    // 7.4 Configure DMA Descriptor 0 via dedicated AXI4-Lite CSR port
-    // Source: PWM_REG_DUTY (0x4000_A000), Destination: GPIO_REG_OUT (0x4000_2180)
-    // Transfer size: 4 bytes (1 word)
-    // Mode: wr_mode=FIXED (1), rd_mode=FIXED (1), enable=1 -> Config = 0x07
-    mmio_write32(DMA_REG_DESC0_SRC, PWM_REG_DUTY);
-    mmio_write32(DMA_REG_DESC0_DST, GPIO_REG_OUT);
-    mmio_write32(DMA_REG_DESC0_LEN, 4U);
-    mmio_write32(DMA_REG_DESC0_CFG, 0x00000007U);
-    TEST_ASSERT(true, "DMA Descriptor 0 programmed (PWM -> GPIO, 4 Bytes, FIXED->FIXED)");
-
-    // 7.5 Trigger Autonomous Transfer via DMA_CONTROL GO bit (bit 0 = 1, max_burst = 1)
-    mmio_write32(DMA_REG_CONTROL, 0x00000005U);
-
-    // 7.6 Verify Transfer Completion
-    dma_status = mmio_read32(DMA_REG_STATUS);
-    TEST_ASSERT((dma_status & (1U << 16)) != 0U, "DMA Status reports transfer complete (done = 1)");
-    TEST_ASSERT((dma_status & (1U << 17)) == 0U, "DMA Status reports zero transfer errors (error = 0)");
-
-    // 7.7 Verify Data Integrity at Destination
-    gpio_dst = mmio_read32(GPIO_REG_OUT);
-    TEST_ASSERT(gpio_dst == 0x12345678U, "Data correctly transferred via Interconnect Port S01 (0x12345678)");
-}
-
-// =============================================================================
-// TEST 8: Cross-Peripheral Interconnect Multi-Master Concurrent Routing
+// TEST 7: Cross-Peripheral Interconnect Routing & Region Isolation
 // =============================================================================
 static void test_interconnect_cross_routing(void) {
-    printf("\n--- [TEST 8] Interconnect Multi-Master Routing & Isolation Test ---\n");
+    printf("\n--- [TEST 7] Interconnect Routing & Region Isolation Test ---\n");
 
-    // 8.1 Write unique test signatures across all peripherals simultaneously
+    // 7.1 Write unique test signatures across peripherals simultaneously
     mmio_write32(UART_REG_BAUD_DIV, 0x00000028U); // 40
     mmio_write32(TIMER_REG_CFG0,    0x00010000U); // Prescaler 0, Step 1
     mmio_write32(GPIO_REG_OUT,      0xDEADBEEFU); // GPIO pattern
+    mmio_write32(SEG7_REG_DATA,     0x1234ABCDU); // Seg7 hex pattern
     mmio_write32(PWM_REG_DUTY,      0x5A5A5A5AU); // PWM pattern
-    mmio_write32(I2C_REG_PRER_LO,   0x00000032U); // 50
 
-    // 8.2 Verify each peripheral retains its exact data without address bleeding or cross-talk
+    // 7.2 Verify each peripheral retains its exact data without address bleeding or cross-talk
     bool uart_ok  = (mmio_read32(UART_REG_BAUD_DIV) == 0x00000028U);
     bool timer_ok = (mmio_read32(TIMER_REG_CFG0)    == 0x00010000U);
     bool gpio_ok  = (mmio_read32(GPIO_REG_OUT)      == 0xDEADBEEFU);
+    bool seg7_ok  = (mmio_read32(SEG7_REG_DATA)     == 0x1234ABCDU);
     bool pwm_ok   = (mmio_read32(PWM_REG_DUTY)      == 0x5A5A5A5AU);
-    bool i2c_ok   = (mmio_read32(I2C_REG_PRER_LO)   == 0x00000032U);
 
-    TEST_ASSERT(uart_ok && timer_ok && gpio_ok && pwm_ok && i2c_ok,
-                "Interconnect address decoding and region isolation verified across all 6 slaves");
+    TEST_ASSERT(uart_ok && timer_ok && gpio_ok && seg7_ok && pwm_ok,
+                "Interconnect address decoding and region isolation verified across slaves");
 }
 
 // =============================================================================
@@ -356,9 +354,8 @@ int main(void) {
     test_hardware_timer();
     test_gpio_controller();
     test_spi_controller();
-    test_i2c_controller();
+    test_seg7_controller();
     test_pwm_generator();
-    test_dma_controller();
     test_interconnect_cross_routing();
 
     printf("\n==================================================================\n");

@@ -51,13 +51,8 @@ module tb_smart_controlsoc_top;
     localparam SPI_DRR          = SPI_BASE + 32'h6C; // Data Receive Register
     localparam SPI_SSR          = SPI_BASE + 32'h70; // Slave Select Register
 
-    // I2C Memory-Mapped Register Base & Offsets (Port M04: 0x4000_8000)
-    localparam I2C_BASE         = 32'h4000_8000;
-    localparam I2C_PRER_LO      = I2C_BASE + 32'h00; // Clock Prescale register Low byte
-    localparam I2C_PRER_HI      = I2C_BASE + 32'h04; // Clock Prescale register High byte
-    localparam I2C_CTR          = I2C_BASE + 32'h08; // Control register
-    localparam I2C_TXR_RXR      = I2C_BASE + 32'h0C; // Transmit/Receive register
-    localparam I2C_CR_SR        = I2C_BASE + 32'h10; // Command/Status register
+    // Seven-Segment Display Memory-Mapped Register Base (Port M04: 0x4000_8000)
+    localparam SEG7_BASE        = 32'h4000_8000;
 
     // PWM Memory-Mapped Register Base & Offsets (Port M05: 0x4000_A000)
     localparam PWM_BASE         = 32'h4000_A000;
@@ -92,20 +87,6 @@ module tb_smart_controlsoc_top;
     localparam GPIO_INTRPT_FALL_EN  = GPIO_BASE + 32'h400; // Falling edge interrupt enable
     localparam GPIO_INTRPT_STATUS   = GPIO_BASE + 32'h580; // Aggregated interrupt status (W1C)
 
-    // DMA Memory-Mapped Register Offsets (Dedicated AXI4-Lite CSR Port)
-    localparam DMA_CONTROL          = 32'h00; // Control: [0] go, [1] abort, [9:2] max_burst
-    localparam DMA_STATUS           = 32'h08; // Status: [15:0] version (0xCAFE), [16] done, [17] error
-    localparam DMA_ERROR_ADDR       = 32'h10; // Error address
-    localparam DMA_ERROR_STATS      = 32'h18; // Error stats
-    localparam DMA_DESC0_SRC        = 32'h20; // Desc 0 Source address
-    localparam DMA_DESC1_SRC        = 32'h28; // Desc 1 Source address
-    localparam DMA_DESC0_DST        = 32'h30; // Desc 0 Destination address
-    localparam DMA_DESC1_DST        = 32'h38; // Desc 1 Destination address
-    localparam DMA_DESC0_LEN        = 32'h40; // Desc 0 Transfer Length in Bytes
-    localparam DMA_DESC1_LEN        = 32'h48; // Desc 1 Transfer Length in Bytes
-    localparam DMA_DESC0_CFG        = 32'h50; // Desc 0 Config: [0] wr_mode, [1] rd_mode, [2] enable
-    localparam DMA_DESC1_CFG        = 32'h58; // Desc 1 Config: [0] wr_mode, [1] rd_mode, [2] enable
-
     // Simulation Baud Divisor: 40 clock cycles per bit (400 ns per bit)
     localparam BAUD_DIV_VAL     = 32'd40;
     localparam BIT_TICKS        = 40;
@@ -130,14 +111,9 @@ module tb_smart_controlsoc_top;
     // Timer Signals
     wire timer_interrupt_o;
 
-    // I2C Signals
-    wire i2c_scl_io;
-    wire i2c_sda_io;
-    wire i2c_interrupt_o;
-
-    // Pull-up resistors for I2C open-drain lines
-    pullup(i2c_scl_io);
-    pullup(i2c_sda_io);
+    // Seven-Segment Display Signals (Port M04: 0x4000_8000)
+    wire [7:0] seg7_seg_o;
+    wire [7:0] seg7_an_o;
 
     // GPIO Signals
     wire [31:0] gpio_io;
@@ -151,31 +127,6 @@ module tb_smart_controlsoc_top;
             assign gpio_io[g] = gpio_tb_drive_en[g] ? gpio_tb_drive_val[g] : 1'bz;
         end
     endgenerate
-
-    // DMA Host CSR Control Signals
-    reg  [ADDR_WIDTH-1:0] dma_csr_awaddr_i;
-    reg  [2:0]            dma_csr_awprot_i;
-    reg                   dma_csr_awvalid_i;
-    wire                  dma_csr_awready_o;
-    reg  [DATA_WIDTH-1:0] dma_csr_wdata_i;
-    reg  [STRB_WIDTH-1:0] dma_csr_wstrb_i;
-    reg                   dma_csr_wvalid_i;
-    wire                  dma_csr_wready_o;
-    wire [1:0]            dma_csr_bresp_o;
-    wire                  dma_csr_bvalid_o;
-    reg                   dma_csr_bready_i;
-    reg  [ADDR_WIDTH-1:0] dma_csr_araddr_i;
-    reg  [2:0]            dma_csr_arprot_i;
-    reg                   dma_csr_arvalid_i;
-    wire                  dma_csr_arready_o;
-    wire [DATA_WIDTH-1:0] dma_csr_rdata_o;
-    wire [1:0]            dma_csr_rresp_o;
-    wire                  dma_csr_rvalid_o;
-    reg                   dma_csr_rready_i;
-
-    // DMA Interrupt Signals
-    wire                  dma_done_interrupt_o;
-    wire                  dma_error_interrupt_o;
 
     // Error Tracking
     integer error_count = 0;
@@ -214,34 +165,12 @@ module tb_smart_controlsoc_top;
         .spi_cs_n_o       (spi_cs_n_o),
         .spi_mosi_o       (spi_mosi_o),
         .spi_miso_i       (spi_miso_i),
-        .i2c_scl_io       (i2c_scl_io),
-        .i2c_sda_io       (i2c_sda_io),
-        .i2c_interrupt_o  (i2c_interrupt_o),
+        .seg7_seg_o       (seg7_seg_o),
+        .seg7_an_o        (seg7_an_o),
         .pwm_out_o        (pwm_out_o),
         .gpio_io          (gpio_io),
         .gpio_interrupt_o (gpio_interrupt_o),
-        .timer_interrupt_o(timer_interrupt_o),
-        .dma_csr_awaddr_i (dma_csr_awaddr_i),
-        .dma_csr_awprot_i (dma_csr_awprot_i),
-        .dma_csr_awvalid_i(dma_csr_awvalid_i),
-        .dma_csr_awready_o(dma_csr_awready_o),
-        .dma_csr_wdata_i  (dma_csr_wdata_i),
-        .dma_csr_wstrb_i  (dma_csr_wstrb_i),
-        .dma_csr_wvalid_i (dma_csr_wvalid_i),
-        .dma_csr_wready_o (dma_csr_wready_o),
-        .dma_csr_bresp_o  (dma_csr_bresp_o),
-        .dma_csr_bvalid_o (dma_csr_bvalid_o),
-        .dma_csr_bready_i (dma_csr_bready_i),
-        .dma_csr_araddr_i (dma_csr_araddr_i),
-        .dma_csr_arprot_i (dma_csr_arprot_i),
-        .dma_csr_arvalid_i(dma_csr_arvalid_i),
-        .dma_csr_arready_o(dma_csr_arready_o),
-        .dma_csr_rdata_o  (dma_csr_rdata_o),
-        .dma_csr_rresp_o  (dma_csr_rresp_o),
-        .dma_csr_rvalid_o (dma_csr_rvalid_o),
-        .dma_csr_rready_i (dma_csr_rready_i),
-        .dma_done_interrupt_o (dma_done_interrupt_o),
-        .dma_error_interrupt_o(dma_error_interrupt_o)
+        .timer_interrupt_o(timer_interrupt_o)
     );
 
     // =========================================================================
@@ -296,65 +225,6 @@ module tb_smart_controlsoc_top;
         begin
             dut.cpu_inst.cpu_read(addr, data);
             $display("[%0t ns] [CPU <- AXI] LOAD  0x%08h -> 0x%08h", $time, addr, data);
-        end
-    endtask
-
-    // DMA CSR MMIO Write Task
-    task dma_write(
-        input [ADDR_WIDTH-1:0] addr,
-        input [DATA_WIDTH-1:0] data
-    );
-        begin
-            @(posedge sys_clk);
-            dma_csr_awaddr_i  <= addr;
-            dma_csr_awprot_i  <= 3'b000;
-            dma_csr_awvalid_i <= 1'b1;
-            dma_csr_wdata_i   <= data;
-            dma_csr_wstrb_i   <= 4'hF;
-            dma_csr_wvalid_i  <= 1'b1;
-            dma_csr_bready_i  <= 1'b1;
-
-            fork
-                begin
-                    while (!dma_csr_awready_o) @(posedge sys_clk);
-                    @(posedge sys_clk);
-                    dma_csr_awvalid_i <= 1'b0;
-                end
-                begin
-                    while (!dma_csr_wready_o) @(posedge sys_clk);
-                    @(posedge sys_clk);
-                    dma_csr_wvalid_i <= 1'b0;
-                end
-            join
-
-            while (!dma_csr_bvalid_o) @(posedge sys_clk);
-            @(posedge sys_clk);
-            dma_csr_bready_i <= 1'b0;
-            $display("[%0t ns] [DMA CSR WRITE] 0x%08h = 0x%08h", $time, addr, data);
-        end
-    endtask
-
-    // DMA CSR MMIO Read Task
-    task dma_read(
-        input  [ADDR_WIDTH-1:0] addr,
-        output [DATA_WIDTH-1:0] data
-    );
-        begin
-            @(posedge sys_clk);
-            dma_csr_araddr_i  <= addr;
-            dma_csr_arprot_i  <= 3'b000;
-            dma_csr_arvalid_i <= 1'b1;
-            dma_csr_rready_i  <= 1'b1;
-
-            while (!dma_csr_arready_o) @(posedge sys_clk);
-            @(posedge sys_clk);
-            dma_csr_arvalid_i <= 1'b0;
-
-            while (!dma_csr_rvalid_o) @(posedge sys_clk);
-            data = dma_csr_rdata_o;
-            @(posedge sys_clk);
-            dma_csr_rready_i <= 1'b0;
-            $display("[%0t ns] [DMA CSR READ]  0x%08h -> 0x%08h", $time, addr, data);
         end
     endtask
 
@@ -445,57 +315,16 @@ module tb_smart_controlsoc_top;
                             instr_count = instr_count + 1;
                             if (op == "W" || op == "01" || op == "1") begin
                                 write_count = write_count + 1;
-                                if (addr >= 32'h4000_C000 && addr <= 32'h4000_C0FF) begin
-                                    dma_write(addr - 32'h4000_C000, data);
-                                    if ((addr - 32'h4000_C000) == 32'h00 && (data & 32'h1)) begin
-                                        $display("[%0t ns] [HEX TB] DMA Go triggered! Waiting for transfer...", $time);
-                                        fork
-                                            begin
-                                                wait (dma_done_interrupt_o === 1'b1);
-                                                @(posedge sys_clk);
-                                            end
-                                            begin
-                                                #(CLK_PERIOD * 500);
-                                            end
-                                        join_any
-                                    end
-                                end else begin
-                                    cpu_write(addr, data);
-                                end
+                                cpu_write(addr, data);
                             end else if (op == "R" || op == "02" || op == "2") begin
-                                if (addr >= 32'h4000_C000 && addr <= 32'h4000_C0FF) begin
-                                    dma_read(addr - 32'h4000_C000, rdata);
-                                    if ((addr - 32'h4000_C000) == 32'h08) begin
-                                        if (rdata[15:0] === 16'hCAFE && (data[16] ? rdata[16] === 1'b1 : 1'b1)) begin
-                                            $display("[%0t ns] [HEX TB PASS] DMA STATUS = 0x%08h (version=0xCAFE%s)", 
-                                                     $time, rdata, rdata[16] ? ", done=1" : "");
-                                            match_count = match_count + 1;
-                                        end else begin
-                                            $display("[%0t ns] [HEX TB FAIL] DMA STATUS mismatch: 0x%08h (Expected 0x%08h)", 
-                                                     $time, rdata, data);
-                                            hex_errors = hex_errors + 1;
-                                            error_count = error_count + 1;
-                                        end
-                                    end else begin
-                                        if (rdata === data) begin
-                                            $display("[%0t ns] [HEX TB PASS] DMA Read 0x%08h == 0x%08h (Match)", $time, addr, rdata);
-                                            match_count = match_count + 1;
-                                        end else begin
-                                            $display("[%0t ns] [HEX TB FAIL] DMA Read 0x%08h returned 0x%08h (Expected 0x%08h)", $time, addr, rdata, data);
-                                            hex_errors = hex_errors + 1;
-                                            error_count = error_count + 1;
-                                        end
-                                    end
+                                cpu_read(addr, rdata);
+                                if (rdata === data) begin
+                                    $display("[%0t ns] [HEX TB PASS] Read 0x%08h == 0x%08h (Match)", $time, addr, rdata);
+                                    match_count = match_count + 1;
                                 end else begin
-                                    cpu_read(addr, rdata);
-                                    if (rdata === data) begin
-                                        $display("[%0t ns] [HEX TB PASS] Read 0x%08h == 0x%08h (Match)", $time, addr, rdata);
-                                        match_count = match_count + 1;
-                                    end else begin
-                                        $display("[%0t ns] [HEX TB FAIL] Read 0x%08h returned 0x%08h (Expected 0x%08h)", $time, addr, rdata, data);
-                                        hex_errors = hex_errors + 1;
-                                        error_count = error_count + 1;
-                                    end
+                                    $display("[%0t ns] [HEX TB FAIL] Read 0x%08h returned 0x%08h (Expected 0x%08h)", $time, addr, rdata, data);
+                                    hex_errors = hex_errors + 1;
+                                    error_count = error_count + 1;
                                 end
                             end
                         end
@@ -538,17 +367,6 @@ module tb_smart_controlsoc_top;
         spi_miso_i = 1'b0;
         gpio_tb_drive_val = 32'd0;
         gpio_tb_drive_en  = 32'd0;
-        dma_csr_awaddr_i  = 32'h0;
-        dma_csr_awprot_i  = 3'b0;
-        dma_csr_awvalid_i = 1'b0;
-        dma_csr_wdata_i   = 32'h0;
-        dma_csr_wstrb_i   = 4'h0;
-        dma_csr_wvalid_i  = 1'b0;
-        dma_csr_bready_i  = 1'b0;
-        dma_csr_araddr_i  = 32'h0;
-        dma_csr_arprot_i  = 3'b0;
-        dma_csr_arvalid_i = 1'b0;
-        dma_csr_rready_i  = 1'b0;
 
         // Hold reset for 10 clock cycles
         #(CLK_PERIOD * 10);
@@ -818,51 +636,6 @@ module tb_smart_controlsoc_top;
         $display("PASS: PWM Generator running cleanly over interconnect!");
 
         // ---------------------------------------------------------------------
-        // TEST 9: I2C Controller MMIO Access & Prescaler Configuration
-        // ---------------------------------------------------------------------
-        test_count = test_count + 1;
-        $display("\n[TEST 9] Testing I2C Controller MMIO Access (0x4000_8000)...");
-
-        // Step 1: Read default Clock Prescale Register Low byte (0x4000_8000)
-        cpu_read(I2C_PRER_LO, read_val);
-        $display("[%0t ns] I2C PRER_LO Read = 0x%08h", $time, read_val);
-        if (read_val[7:0] === 8'hFF) begin
-            $display("PASS: I2C Clock Prescaler correctly initialized to 0xFF after reset!");
-        end else begin
-            $error("FAIL: I2C PRER_LO unexpected reset value: 0x%08h", read_val);
-            error_count = error_count + 1;
-        end
-
-        // Step 2: Configure Clock Prescaler to 0x64 (100)
-        cpu_write(I2C_PRER_LO, 32'h0000_0064);
-        cpu_read(I2C_PRER_LO, read_val);
-        if (read_val[7:0] === 8'h64) begin
-            $display("PASS: I2C Clock Prescaler successfully programmed to 0x64 (100)!");
-        end else begin
-            $error("FAIL: I2C PRER_LO readback mismatch: 0x%08h", read_val);
-            error_count = error_count + 1;
-        end
-
-        // Step 3: Enable I2C Core by writing to CTR register (0x4000_8008)
-        cpu_write(I2C_CTR, 32'h0000_0080); // bit 7: EN = 1
-        cpu_read(I2C_CTR, read_val);
-        if (read_val[7] === 1'b1) begin
-            $display("PASS: I2C Core successfully enabled (CTR[7] = 1)!");
-        end else begin
-            $error("FAIL: I2C CTR enable readback mismatch: 0x%08h", read_val);
-            error_count = error_count + 1;
-        end
-
-        // Step 4: Verify default bus lines are pulled HIGH (open-drain idling)
-        #(CLK_PERIOD * 50);
-        if (i2c_scl_io === 1'b1 && i2c_sda_io === 1'b1) begin
-            $display("PASS: I2C SCL & SDA lines correctly idling HIGH!");
-        end else begin
-            $error("FAIL: I2C bus lines not pulled high: SCL=%b, SDA=%b", i2c_scl_io, i2c_sda_io);
-            error_count = error_count + 1;
-        end
-
-        // ---------------------------------------------------------------------
         // TEST 10: GPIO Controller Integration, MMIO, IO Control & Interrupts
         // ---------------------------------------------------------------------
         test_count = test_count + 1;
@@ -1117,88 +890,6 @@ module tb_smart_controlsoc_top;
             end
         end
 
-        // ---------------------------------------------------------------------
-        // TEST 12: DMA Autonomous Interconnect Transfer (S01 Bus Master)
-        // ---------------------------------------------------------------------
-        begin
-            test_count = test_count + 1;
-            $display("\n==================================================================");
-            $display("[TEST 12] Testing DMA Controller Autonomous Transfer via Interconnect S01...");
-            $display("==================================================================");
-
-            // Subtest 12.1: Verify DMA CSR Access & Version Signature
-            dma_read(DMA_STATUS, read_val);
-            $display("[%0t ns] DMA STATUS Read = 0x%08h (Expected Version: 0xCAFE)", $time, read_val);
-            if (read_val[15:0] === 16'hcafe) begin
-                $display("PASS: DMA Status reports correct hardware version signature 0xCAFE!");
-            end else begin
-                $error("FAIL: DMA version mismatch: expected 0xCAFE, got 0x%04h", read_val[15:0]);
-                error_count = error_count + 1;
-            end
-
-            // Subtest 12.2: Setup Data in Source Peripheral (PWM Base: 0x4000_A000)
-            cpu_write(PWM_BASE, 32'h1234_5678);
-            cpu_read(PWM_BASE, read_val);
-            if (read_val === 32'h1234_5678) begin
-                $display("PASS: Source register (PWM Duty Reg) initialized to 0x1234_5678!");
-            end else begin
-                $error("FAIL: Source register write failed: 0x%08h", read_val);
-                error_count = error_count + 1;
-            end
-
-            // Clear Destination (GPIO_OUT: 0x4000_2180) via CPU
-            cpu_write(GPIO_OUT, 32'h0000_0000);
-            cpu_read(GPIO_OUT, read_val);
-            if (read_val === 32'h0000_0000) begin
-                $display("PASS: Destination register (GPIO_OUT) cleared to 0x0000_0000!");
-            end
-
-            // Subtest 12.3: Program DMA Descriptor 0 via CSR Port
-            // Source = 0x4000_A000 (PWM Base), Destination = 0x4000_2180 (GPIO Output)
-            // Length = 4 bytes (1 word)
-            // Config = wr_mode: FIXED (1), rd_mode: FIXED (1), enable: 1 -> 3'b111 = 0x7
-            dma_write(DMA_DESC0_SRC, PWM_BASE);
-            dma_write(DMA_DESC0_DST, GPIO_OUT);
-            dma_write(DMA_DESC0_LEN, 32'd4);
-            dma_write(DMA_DESC0_CFG, 32'h0000_0007);
-
-            // Subtest 12.4: Trigger DMA Transfer via GO bit in DMA_CONTROL
-            $display("[%0t ns] Triggering DMA transfer via DMA_CONTROL GO bit...", $time);
-            dma_write(DMA_CONTROL, 32'h0000_0005); // max_burst=1, abort=0, go=1
-
-            // Subtest 12.5: Wait for DMA Transfer Completion via Done Interrupt
-            fork
-                begin
-                    wait (dma_done_interrupt_o === 1'b1);
-                    $display("[%0t ns] PASS: dma_done_interrupt_o asserted!", $time);
-                end
-                begin
-                    #(CLK_PERIOD * 500);
-                    if (dma_done_interrupt_o !== 1'b1) begin
-                        $error("FAIL: DMA transfer timed out waiting for dma_done_interrupt_o!");
-                        error_count = error_count + 1;
-                    end
-                end
-            join_any
-
-            // Verify DMA status done bit and no error
-            dma_read(DMA_STATUS, read_val);
-            if (read_val[16] === 1'b1 && read_val[17] === 1'b0) begin
-                $display("PASS: DMA STATUS confirms transfer complete (done=1, error=0)!");
-            end else begin
-                $error("FAIL: DMA STATUS unexpected: 0x%08h", read_val);
-                error_count = error_count + 1;
-            end
-
-            // Subtest 12.6: Verify Transferred Data at Destination Register
-            cpu_read(GPIO_OUT, read_val);
-            if (read_val === 32'h1234_5678) begin
-                $display("PASS: Autonomous DMA transfer verified! GPIO_OUT received 0x%08h from PWM via Interconnect Port S01!", read_val);
-            end else begin
-                $error("FAIL: Destination data mismatch: expected 0x1234_5678, got 0x%08h", read_val);
-                error_count = error_count + 1;
-            end
-        end
         end // end if ($test$plusargs("RUN_ALL_TESTS"))
 
         // ---------------------------------------------------------------------
@@ -1208,7 +899,7 @@ module tb_smart_controlsoc_top;
         $display("\n==================================================================");
         if (error_count == 0) begin
             $display("   *** ALL C FIRMWARE CHECKS AND SYSTEM-LEVEL TESTS PASSED! ***");
-            $display("   RISC-V CPU <-> AXI INTERCONNECT <-> UART, TIMER, GPIO, SPI, I2C, PWM & DMA VERIFIED");
+            $display("   RISC-V CPU <-> AXI INTERCONNECT <-> UART, TIMER, GPIO, SPI, SEG7 & PWM VERIFIED");
             $display("   Waveforms captured in smart_controlsoc.fsdb (View: verdi -ssf smart_controlsoc.fsdb)");
         end else begin
             $display("   *** VERIFICATION FAILED WITH %0d ERRORS! ***", error_count);
