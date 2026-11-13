@@ -57,11 +57,11 @@ module tb_axi_uart_top;
   // -------------------------------------------------------------------------
   // Register address offsets (word-aligned, shifted by AXI_LSB_WIDTH=2)
   // -------------------------------------------------------------------------
-  localparam ADDR_RBR_THR     = (3'd0 << AXI_LSB_WIDTH);  // 0x00
-  localparam ADDR_IER         = (3'd1 << AXI_LSB_WIDTH);  // 0x04
-  localparam ADDR_BAUD_DIV    = (3'd2 << AXI_LSB_WIDTH);  // 0x08
-  localparam ADDR_LCR         = (3'd3 << AXI_LSB_WIDTH);  // 0x0C
-  localparam ADDR_LSR         = (3'd5 << AXI_LSB_WIDTH);  // 0x14
+  localparam ADDR_RBR_THR     = (5'd0 << AXI_LSB_WIDTH);  // 0x00
+  localparam ADDR_IER         = (5'd1 << AXI_LSB_WIDTH);  // 0x04
+  localparam ADDR_BAUD_DIV    = (5'd2 << AXI_LSB_WIDTH);  // 0x08
+  localparam ADDR_LCR         = (5'd3 << AXI_LSB_WIDTH);  // 0x0C
+  localparam ADDR_LSR         = (5'd5 << AXI_LSB_WIDTH);  // 0x14
 
   // LCR bit positions
   localparam LCR_DLAB         = 7;   // DLAB bit
@@ -188,7 +188,7 @@ module tb_axi_uart_top;
     input [AXI_ID_WIDTH-1:0]    id;
     integer timeout;
     begin
-      // Present address and data
+      // Present address, data, and ready for response
       @(negedge axi_aclk_i);
       axi_awaddr_i  = addr;
       axi_awid_i    = id;
@@ -198,27 +198,19 @@ module tb_axi_uart_top;
       axi_wvalid_i  = 1'b1;
       axi_bready_i  = 1'b1;
 
-      // Wait for awready & wready
+      // Maintain valid signals until slave accepts write and provides response
       timeout = 200;
       @(posedge axi_aclk_i); #1;
-      while (!(axi_awready_o && axi_wready_o) && timeout > 0) begin
+      while ((!(axi_awready_o && axi_wready_o) || !axi_bvalid_o) && timeout > 0) begin
         @(posedge axi_aclk_i); #1;
         timeout = timeout - 1;
       end
-      // Deassert valids
+
+      // Complete handshake and deassert request signals
       @(negedge axi_aclk_i);
       axi_awvalid_i = 1'b0;
       axi_wvalid_i  = 1'b0;
-
-      // Wait for bvalid
-      timeout = 200;
-      @(posedge axi_aclk_i); #1;
-      while (!axi_bvalid_o && timeout > 0) begin
-        @(posedge axi_aclk_i); #1;
-        timeout = timeout - 1;
-      end
-      @(negedge axi_aclk_i);
-      axi_bready_i = 1'b0;
+      axi_bready_i  = 1'b0;
       @(posedge axi_aclk_i); #1;
     end
   endtask
@@ -237,26 +229,21 @@ module tb_axi_uart_top;
       axi_arvalid_i = 1'b1;
       axi_rready_i  = 1'b1;
 
-      // Wait for arready
+      // Maintain valid until slave acknowledges address and provides read data
       timeout = 200;
       @(posedge axi_aclk_i); #1;
-      while (!axi_arready_o && timeout > 0) begin
+      while ((!axi_arready_o || !axi_rvalid_o) && timeout > 0) begin
         @(posedge axi_aclk_i); #1;
         timeout = timeout - 1;
       end
+
+      // Capture read data while rvalid_o is asserted
+      axi_rd_data = axi_rdata_o;
+
+      // Complete handshake and deassert request signals
       @(negedge axi_aclk_i);
       axi_arvalid_i = 1'b0;
-
-      // Wait for rvalid
-      timeout = 200;
-      @(posedge axi_aclk_i); #1;
-      while (!axi_rvalid_o && timeout > 0) begin
-        @(posedge axi_aclk_i); #1;
-        timeout = timeout - 1;
-      end
-      axi_rd_data = axi_rdata_o;
-      @(negedge axi_aclk_i);
-      axi_rready_i = 1'b0;
+      axi_rready_i  = 1'b0;
       @(posedge axi_aclk_i); #1;
     end
   endtask
