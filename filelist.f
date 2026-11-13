@@ -22,7 +22,7 @@ rtl/interconnect/priority_encoder.v
 rtl/interconnect/axi_interconnect.v
 rtl/interconnect/axi_interconnect_wrap_2x6.v
 
-// UART Peripheral (Port M00: 0x2000_0000)
+// UART Peripheral (Port M00: 0x4000_0000)
 rtl/uart_directory/rtl/axi_internal_fifo.v
 rtl/uart_directory/rtl/uart_parity_bit_compute.v
 rtl/uart_directory/rtl/uart_receiver.v
@@ -30,11 +30,11 @@ rtl/uart_directory/rtl/uart_transmitter.v
 rtl/uart_directory/rtl/uart_controller.v
 rtl/uart_directory/rtl/axi_uart_top.v
 
-// Hardware Timer Peripheral (Port M01: 0x2000_1000)
+// Hardware Timer Peripheral (Port M01: 0x4000_4000)
 rtl/timer_directory/rtl/timer_core.sv
 rtl/timer_directory/rtl/axi_timer_top.sv
 
-// SPI Controller Peripheral (Port M03: 0x2000_3000)
+// SPI Controller Peripheral (Port M03: 0x4000_6000)
 rtl/spi_directory/rtl/ratio_clk.v
 rtl/spi_directory/rtl/spi_clk_gen.v
 rtl/spi_directory/rtl/spi_ctrl.v
@@ -49,11 +49,11 @@ rtl/seg7_directory/rtl/axi_seg7_slave.v
 rtl/seg7_directory/rtl/seg7_core.sv
 rtl/seg7_directory/rtl/axi_seg7_top.sv
 
-// PWM Generator Peripheral (Port M05: 0x2000_5000)
+// PWM Generator Peripheral (Port M05: 0x4000_A000)
 rtl/pwm_directory/rtl/myip_v1_0_S00_AXI.v
 rtl/pwm_directory/rtl/myip_v1_0.v
 
-// GPIO Peripheral (Port M02: 0x2000_2000)
+// GPIO Peripheral (Port M02: 0x4000_2000)
 rtl/gpio_directory/rtl/gpio_reg_pkg.sv
 rtl/gpio_directory/rtl/gpio_reg_top.sv
 rtl/gpio_directory/rtl/gpio_input_stage.sv
