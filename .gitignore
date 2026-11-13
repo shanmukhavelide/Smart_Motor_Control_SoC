@@ -36,3 +36,9 @@ log/csrc/
 # Generated simulation and firmware build outputs
 /log/sim_main1
 /sw/build/
+sim_*
+simv*
+csrc/
+*.fsdb
+*.vcd
+obj_dir/
