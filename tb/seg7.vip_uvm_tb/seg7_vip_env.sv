@@ -16,6 +16,5 @@ class seg7_vip_env extends uvm_env;
   function void connect_phase(uvm_phase phase);
     super.connect_phase(phase);
     agent.mon.ap.connect(sb.mon_imp);
-    sb.mon = agent.mon;
   endfunction
 endclass

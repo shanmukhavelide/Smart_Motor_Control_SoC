@@ -1,0 +1,23 @@
+======================================================================
+Smart Motor Control SoC - Master Regression Summary
+Timestamp: 2026-11-13 04:03:47
+======================================================================
+Total Test Suites: 11
+PASSED:            6
+FAILED:            0
+BLOCKED:           5
+
+Detailed Results:
+----------------------------------------------------------------------
+UNIT_UART             : PASS (20/20 unit checks passed; tb fix only, RTL untouched)
+UNIT_SEG7             : PASS (41/41 unit checks passed)
+UNIT_SPI              : PASS (119/119 Mode 0 tests passed)
+UNIT_PWM              : PASS (28/28 duty-cycle tests passed)
+HOST_C_FIRMWARE       : PASS (36/36 subtests passed across all modules)
+RISCV_FIRMWARE_BUILD  : PASS (Produced firmware.elf, firmware.bin, firmware.hex (169 lines))
+UVM_PWM               : BLOCKED (License/Simulator Unavailable) (Script ./run_pwm_uvm.sh ready. Blocked by license server 27021@14.139.1.126)
+UVM_SPI               : BLOCKED (License/Simulator Unavailable) (Script ./run_spi_uvm.sh ready. Blocked by license server 27021@14.139.1.126)
+UVM_SEG7              : BLOCKED (License/Simulator Unavailable) (Script ./run_seg7_uvm.sh ready. Blocked by license server 27021@14.139.1.126)
+UVM_SOC               : BLOCKED (License/Simulator Unavailable) (Script ./run_soc_uvm.sh ready. Blocked by license server 27021@14.139.1.126)
+SOC_DIRECTED          : BLOCKED (License/Simulator Unavailable) (Script ./run_vcs_sim.sh ready. Blocked by license server 27021@14.139.1.126)
+======================================================================

@@ -1,9 +1,8 @@
 // =============================================================================
 // Smart ControlSoC - SoC-Level UVM Verification Filelist
 // Dedicated filelist for VCS compilation of tb_soc_uvm_top
-// Excludes all AES components per strict project scope limitations
-// Integrates the 5 external peripheral interfaces from Smart_ControlSoC_Testplan.csv
-// (UART, GPIO, I2C, SPI, PWM)
+// Excludes all AES, I2C, and DMA components
+// Integrates 6 peripherals: UART, Timer, GPIO, SPI, Seven-Segment (SEG7), PWM
 // =============================================================================
 
 // Include Directories
@@ -13,10 +12,10 @@
 +incdir+rtl/gpio_directory/include
 +incdir+tb/uart.vip_uvm_tb
 +incdir+tb/gpio.vip_uvm_tb
-+incdir+tb/i2c.vip_uvm_tb
 +incdir+tb/spi.vip_uvm_tb
 +incdir+tb/pwm.vip_uvm_tb
-+incdir+tb/soc_uvm
++incdir+tb/seg7.vip_uvm_tb
++incdir+tb/uvm/soc
 +incdir+tb/soc_uvm/interfaces
 
 // OpenTitan Primitives & Common Cells
@@ -24,10 +23,10 @@ rtl/gpio_directory/include/reg_bus.sv
 rtl/gpio_directory/include/common_cells/prim_subreg.sv
 rtl/gpio_directory/include/common_cells/prim_subreg_ext.sv
 
-// RISC-V VeeR EL2 Core Wrapper
+// RISC-V VeeR EL2 Core Wrapper (Behavioral BFM)
 rtl/Cores-VeeR-EL2/el2_veer_wrapper.v
 
-// Interconnect Subsystem
+// Interconnect Subsystem (2x6 Crossbar)
 rtl/interconnect/arbiter.v
 rtl/interconnect/priority_encoder.v
 rtl/interconnect/axi_interconnect.v
@@ -74,12 +73,7 @@ rtl/gpio_directory/rtl/axi_gpio_top.sv
 // Top-Level SoC RTL (Module: smart_controlsoc_top)
 rtl/smart_controlsoc_top.v
 
-// SoC Interface Files
-tb/soc_uvm/interfaces/uart_if.sv
-tb/soc_uvm/interfaces/gpio_if.sv
-tb/soc_uvm/interfaces/i2c_if.sv
-tb/soc_uvm/interfaces/spi_if.sv
-tb/soc_uvm/interfaces/pwm_if.sv
+// CPU BFM Interface
 tb/soc_uvm/interfaces/cpu_bfm_if.sv
 
 // Reused Peripheral VIP Interfaces & Packages (5 External Interfaces)
@@ -87,15 +81,15 @@ tb/uart.vip_uvm_tb/uart_vip_if.sv
 tb/uart.vip_uvm_tb/uart_vip_pkg.sv
 tb/gpio.vip_uvm_tb/gpio_vip_if.sv
 tb/gpio.vip_uvm_tb/gpio_vip_pkg.sv
-tb/i2c.vip_uvm_tb/i2c_vip_if.sv
-tb/i2c.vip_uvm_tb/i2c_vip_pkg.sv
 tb/spi.vip_uvm_tb/spi_vip_if.sv
 tb/spi.vip_uvm_tb/spi_vip_pkg.sv
 tb/pwm.vip_uvm_tb/pwm_vip_if.sv
 tb/pwm.vip_uvm_tb/pwm_vip_pkg.sv
+tb/seg7.vip_uvm_tb/seg7_vip_if.sv
+tb/seg7.vip_uvm_tb/seg7_vip_pkg.sv
 
 // SoC-Level UVM Verification Package
-tb/soc_uvm/soc_uvm_pkg.sv
+tb/uvm/soc/soc_uvm_pkg.sv
 
 // SoC-Level UVM Top Testbench
-tb/soc_uvm/tb_soc_uvm_top.sv
+tb/uvm/soc/tb_soc_uvm_top.sv

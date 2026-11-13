@@ -32,3 +32,7 @@ docs_output.txt
 !log/verdiLog/**
 log/csrc/
 
+
+# Generated simulation and firmware build outputs
+/log/sim_main1
+/sw/build/

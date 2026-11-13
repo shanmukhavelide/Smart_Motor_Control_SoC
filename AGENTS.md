@@ -109,3 +109,26 @@ Shell scripts target Linux with Synopsys VCS and Verdi (`VCS_HOME`, `VERDI_HOME`
 - **Line endings**: `.gitattributes` enforces LF (`eol=lf`) for text files, `*.sh`, and `*.hex`. Keep LF endings when editing from Windows.
 - **Sync across layers**: When changing RTL files/directories, update both `filelist.f` and `tb/soc_uvm/filelist_soc_uvm.f`. When changing MMIO addresses or bitfields, update `rtl/smart_controlsoc_top.v`, `sw/soc_memory_map.h`, `sw/main1.c`, `main1.hex`, `tb/tb_smart_controlsoc_top.sv`, and `tb/soc_uvm/*` together.
 - **Tracked vs. ignored outputs**: Do not commit VCS/Verdi build artifacts (`simv*`, `*.daidir/`, `csrc/`, `*.fsdb*`, `*.vcd`, `work/`, `*.log` except tracked subdirectories under `log/`).
+
+---
+
+## Autonomous Execution Rules
+
+1. Execute the approved project workflow phase by phase without repeatedly asking for approval for ordinary workspace edits and safe validation commands.
+2. Maintain `doc/PROJECT_EXECUTION_STATUS.md` throughout execution.
+3. Never repeat completed phases unless an audit identifies a concrete defect.
+4. Before editing a file, inspect its current implementation and dependencies.
+5. After each logical change, run the relevant available validation.
+6. Review modified files and Git diffs before marking a task complete.
+7. Never modify `rtl/Cores-VeeR-EL2/`.
+8. Never execute `git reset --hard`, `git clean -fd`, or destructive recursive deletion.
+9. Never push, merge into main, or create release tags without explicit approval.
+10. Do not silently overwrite existing user changes.
+11. Do not report a test as passed unless it actually executed successfully.
+12. Distinguish IMPLEMENTED, STATIC CHECK PASSED, SIMULATION PASSED, BLOCKED and COMPLETE.
+13. If a required simulator or license is unavailable, continue other safe work and document the blocker.
+14. Do not stop after producing a plan. Continue implementation through the remaining phases.
+15. Work in manageable tasks, preserving the ability to resume from the last verified checkpoint.
+16. Before every phase completion, update the execution status document with changed files, validation evidence, known limitations and next steps.
+17. Preserve existing working functionality and avoid unnecessary rewrites.
+18. Ask for approval before any operation that could permanently destroy user work or alter remote repository state.

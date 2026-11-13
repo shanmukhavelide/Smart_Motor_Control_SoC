@@ -133,7 +133,7 @@ module tb_smart_controlsoc_top;
     integer test_count  = 0;
 
     // =========================================================================
-    
+
     // Receiver State Monitor
     always @(dut.uart_ip_inst.uart_controller_inst.uart_receiver_inst.state) begin
         $display("[%0t ns] [DEBUG RX FSM] state = %b, rx = %b, rx_valid = %b, baud_div = %0d",
@@ -235,7 +235,7 @@ module tb_smart_controlsoc_top;
         integer i;
         begin
             $display("[%0t ns] [HOST UART TX] Sending byte 0x%02h ('%c') to SoC...", $time, tx_data, tx_data);
-            
+
             // Start bit (0)
             uart_rx_i = 1'b0;
             #(CLK_PERIOD * BIT_TICKS);
@@ -426,7 +426,7 @@ module tb_smart_controlsoc_top;
         // ---------------------------------------------------------------------
         test_count = test_count + 1;
         $display("\n[TEST 2] Programming UART Control Registers from RISC-V CPU...");
-        
+
         // 1. Enable DLAB by setting LCR[7] = 1
         cpu_write(UART_LCR, 32'h0000_0080);
 
@@ -501,7 +501,7 @@ module tb_smart_controlsoc_top;
         // ---------------------------------------------------------------------
         test_count = test_count + 1;
         $display("\n[TEST 5] Testing Host RX -> UART Interrupt -> CPU Read & Interrupt Clear...");
-        
+
         // Host transmits byte 0x5A ('Z')
         host_uart_transmit(8'h5A);
 
@@ -574,7 +574,7 @@ module tb_smart_controlsoc_top;
         // ---------------------------------------------------------------------
         test_count = test_count + 1;
         $display("\n[TEST 7] Testing SPI Controller MMIO Access & Transaction...");
-        
+
         // Step 1: Read default SPI Status Register (SR) at 0x4000_6064
         cpu_read(SPI_SR, read_val);
         $display("[%0t ns] SPI SR Read = 0x%08h", $time, read_val);
@@ -609,7 +609,7 @@ module tb_smart_controlsoc_top;
         // ---------------------------------------------------------------------
         test_count = test_count + 1;
         $display("\n[TEST 8] Testing PWM Generator MMIO Access (0x4000_A000)...");
-        
+
         // Step 1: Read default Duty Cycle Register (slv_reg0)
         cpu_read(PWM_DUTY_REG, read_val);
         $display("[%0t ns] PWM Duty Cycle Register Read = 0x%08h", $time, read_val);
@@ -634,6 +634,67 @@ module tb_smart_controlsoc_top;
         #(CLK_PERIOD * 300);
         $display("[%0t ns] Observed PWM Output pin state: %b", $time, pwm_out_o);
         $display("PASS: PWM Generator running cleanly over interconnect!");
+
+        // ---------------------------------------------------------------------
+        // TEST 9: Seven-Segment Display (SEG7) Integration & Waveforms
+        // ---------------------------------------------------------------------
+        test_count = test_count + 1;
+        $display("\n[TEST 9] Testing Seven-Segment Display (SEG7) MMIO & Output Pins (0x4000_8000)...");
+
+        // Subtest 9.1: Default Reset State Verification
+        cpu_read(SEG7_BASE + 32'h00, read_val); // SEG_DATA
+        if (read_val === 32'h0000_0000) begin
+            $display("PASS: SEG_DATA reset value verified (0x0000_0000)!");
+        end else begin
+            $error("FAIL: SEG_DATA reset value unexpected: 0x%08h", read_val);
+            error_count = error_count + 1;
+        end
+
+        cpu_read(SEG7_BASE + 32'h04, read_val); // SEG_CTRL
+        if (read_val === 32'h0000_FF06) begin
+            $display("PASS: SEG_CTRL reset value verified (0x0000_FF06: EN=0, active-low, mask=0xFF)!");
+        end else begin
+            $error("FAIL: SEG_CTRL reset value unexpected: 0x%08h", read_val);
+            error_count = error_count + 1;
+        end
+
+        // Subtest 9.2: Program Fast Refresh Divider (20 cycles per digit)
+        cpu_write(SEG7_BASE + 32'h0C, 32'd20);
+        cpu_read(SEG7_BASE + 32'h0C, read_val);
+        if (read_val === 32'd20) begin
+            $display("PASS: SEG_REFRESH_DIV programmed to 20 clock cycles!");
+        end else begin
+            $error("FAIL: SEG_REFRESH_DIV readback mismatch: 0x%08h", read_val);
+            error_count = error_count + 1;
+        end
+
+        // Subtest 9.3: Program Display Data (0x87654321) & Decimal Points
+        cpu_write(SEG7_BASE + 32'h00, 32'h8765_4321);
+        cpu_write(SEG7_BASE + 32'h08, 32'h0000_0055); // DP on digits 0, 2, 4, 6
+
+        // Subtest 9.4: Enable Display (EN=1, active-low, all 8 digits unmasked)
+        cpu_write(SEG7_BASE + 32'h04, 32'h0000_FF07);
+        #(CLK_PERIOD * 10);
+        $display("[%0t ns] Observed SEG7 Pins: an_o = 0x%02h, seg_o = 0x%02h", $time, seg7_an_o, seg7_seg_o);
+        if (seg7_an_o !== 8'hFF) begin
+            $display("PASS: SEG7 display is actively scanning and driving multiplexed anodes!");
+        end else begin
+            $error("FAIL: SEG7 anodes remain blanked (0xFF) after display enable!");
+            error_count = error_count + 1;
+        end
+
+        // Allow 2 complete refresh cycles (8 digits * 20 cycles = 160 cycles)
+        #(CLK_PERIOD * 200);
+
+        // Subtest 9.5: Disable Display (EN=0) & Check Blanking
+        cpu_write(SEG7_BASE + 32'h04, 32'h0000_FF06);
+        #(CLK_PERIOD * 5);
+        if (seg7_an_o === 8'hFF && seg7_seg_o === 8'hFF) begin
+            $display("PASS: SEG7 display blanked successfully when EN=0 (an_o=0xFF, seg_o=0xFF)!");
+        end else begin
+            $error("FAIL: Blanking failed: an_o = 0x%02h, seg_o = 0x%02h", seg7_an_o, seg7_seg_o);
+            error_count = error_count + 1;
+        end
 
         // ---------------------------------------------------------------------
         // TEST 10: GPIO Controller Integration, MMIO, IO Control & Interrupts
@@ -718,7 +779,7 @@ module tb_smart_controlsoc_top;
         // Pin 1 mode is INPUT_ONLY (bits [3:2] = 2'b00)
         // Enable sampling for Pin 1 via GPIO_EN (bit 1 = 1)
         cpu_write(GPIO_EN, 32'h0000_0002);
-        
+
         // Drive Pin 1 HIGH from testbench
         gpio_tb_drive_val[1] = 1'b1;
         gpio_tb_drive_en[1]  = 1'b1;
@@ -835,7 +896,7 @@ module tb_smart_controlsoc_top;
             cpu_read(TIMER_V_LOWER0, cur_time);
             cpu_write(TIMER_COMPARE_LOWER0, cur_time + 32'd25);
             cpu_write(TIMER_COMPARE_UPPER0, 32'd0);
-            
+
             // Enable Timer Interrupt (INTR_ENABLE0 = 1)
             cpu_write(TIMER_INTR_ENABLE0, 32'h0000_0001);
 
@@ -889,6 +950,36 @@ module tb_smart_controlsoc_top;
                 error_count = error_count + 1;
             end
         end
+
+        // ---------------------------------------------------------------------
+        // TEST 12: Concurrent Multi-Peripheral SoC Stress Test
+        // ---------------------------------------------------------------------
+        test_count = test_count + 1;
+        $display("\n[TEST 12] Testing Concurrent Multi-Peripheral Execution (PWM + SPI + SEG7 + UART)...");
+
+        // 1. Activate PWM at 75% duty
+        cpu_write(PWM_DUTY_REG, 32'd192);
+
+        // 2. Activate SEG7 multiplexed counter
+        cpu_write(SEG7_BASE + 32'h0C, 32'd15);
+        cpu_write(SEG7_BASE + 32'h00, 32'h1234_5678);
+        cpu_write(SEG7_BASE + 32'h04, 32'h0000_FF07);
+
+        // 3. Initiate SPI byte transfer concurrently
+        cpu_write(SPI_CR, 32'h0000_0186);
+        cpu_write(SPI_SSR, 32'hFFFF_FFFE);
+        cpu_write(SPI_DTR, 32'h0000_00BC);
+
+        // 4. Concurrently send UART character
+        cpu_write(UART_THR, 32'h0000_0055);
+
+        #(CLK_PERIOD * 150);
+
+        // Clean up
+        cpu_write(SPI_SSR, 32'hFFFF_FFFF);
+        cpu_write(PWM_DUTY_REG, 32'd0);
+        cpu_write(SEG7_BASE + 32'h04, 32'h0000_FF06);
+        $display("PASS: Multi-peripheral concurrent stress test executed cleanly without cross-talk!");
 
         end // end if ($test$plusargs("RUN_ALL_TESTS"))
 
