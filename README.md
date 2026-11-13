@@ -197,6 +197,12 @@ Smart_Motor_Control_SoC/
 
 ---
 
+## Verification Status
+
+The test suites below have **not been re-run since the IP integration** (Seven-Segment replaced I2C on M04; DMA removed).
+No simulation results are claimed for this version. `tb/soc_uvm/` and the I2C VIP still contain legacy I2C code and are not yet ported.
+Results will be added here with tool, date and log link once re-run.
+
 ## 5. Verification Suites in `tb/`
 
 ### 5.1 Directed SoC Testbench (`tb/tb_smart_controlsoc_top.sv`)
