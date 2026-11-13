@@ -1,32 +1,36 @@
-# RISC-V VeeR EL2 Based Smart Peripheral Control SoC
+# Smart Motor Control SoC (Smart ControlSoC)
 
 ![SoC Architecture](doc/AXI4-Lite%20Smart%20Peripheral%20SoC%20Block%20Diagram.png)
 
-[![ISA](https://img.shields.io/badge/ISA-RISC--V%20RV32IMC-blue.svg)](#)
+[![Architecture](https://img.shields.io/badge/Architecture-CPU%20BFM%20%2B%206%20Peripherals-blue.svg)](#)
 [![Interconnect](https://img.shields.io/badge/Interconnect-AXI4--Lite%20(2x6)-orange.svg)](#)
 [![Verification](https://img.shields.io/badge/Simulation-Synopsys%20VCS%20%2F%20Verdi%20%2F%20Icarus-purple.svg)](#)
-[![Status](https://img.shields.io/badge/Project%20Status-Verified%20Integration-brightgreen.svg)](#)
+[![Status](https://img.shields.io/badge/Project%20Status-Authoritative%20BFM%20SoC-brightgreen.svg)](#)
 
 ---
 
 ## 1. Executive Summary & Project Overview
 
-The **RISC-V VeeR EL2 Based Smart Peripheral Control SoC** (`smart_controlsoc_top`) is a modular, high-performance, peripheral-oriented System-on-Chip (SoC) designed for real-time motor control, embedded monitoring, and multi-protocol industrial hardware interfacing.
+The **Smart Motor Control SoC** (`smart_controlsoc_top` in `rtl/smart_controlsoc_top.v`) is a peripheral-oriented System-on-Chip (SoC) designed for real-time motor control, embedded display driving, and multi-protocol industrial communication.
 
-At the core of the SoC is the Western Digital / CHIPS Alliance **VeeR EL2**, a dual-issue, 4-stage pipelined 32-bit RISC-V processor supporting the **RV32IMC** instruction set architecture. Instruction and data memory accesses execute deterministically via tightly-coupled memories (ICCM for instructions and DCCM for data), while peripheral memory-mapped I/O (MMIO) is serviced across a high-speed **AXI4-Lite 2x6 Shared Interconnect**.
+### Authoritative CPU Architecture & Memory Reality
+* **CPU Implementation (`el2_veer_wrapper.v`):** The authoritative SoC architecture uses a **Behavioral Bus Functional Model (BFM)** for the CPU master (`rtl/Cores-VeeR-EL2/el2_veer_wrapper.v`). It is **not** an active synthesizable processor pipeline.
+* **CPU Memory Reality:** The wrapper contains **zero internal memory** (0 bytes ICCM, 0 bytes DCCM, no cache, and no internal SRAM).
+* **Bus Transactions:** Transactions are generated behaviorally using `cpu_write(addr, data, strb)` and `cpu_read(addr, data)` tasks that directly drive the AXI4-Lite Load-Store Unit (`lsu_axi_*`) master interface on interconnect port `S00`. The instruction-fetch (`ifu_axi_*`), system bus (`sb_axi_*`), DMA slave (`dma_axi_*`), and CPU interrupt lines are tied off (`0`/`idle`).
+* **Synthesizable VeeR Integration Status:** A synthesizable VeeR EL2 core top (`smart_controlsoc_veer_top`) exists as a separate experimental branch and is classified as **EXPERIMENTAL / IMPLEMENTED / NOT DYNAMICALLY VERIFIED**.
 
 ### Key Architectural Highlights
-* **Processing Core:** 32-bit RISC-V VeeR EL2 (RV32IMC) core with Load-Store Unit (LSU) driving AXI4-Lite master port `S00`. Interconnect slave master port `S01` is cleanly tied off.
-* **Bus Interconnect:** 2-Master $\times$ 6-Slave AXI4-Lite Crossbar Interconnect (`axi_interconnect_wrap_2x6`) featuring round-robin arbitration, independent address decoders, and strict slave isolation.
+* **Bus Interconnect:** 2-Master $\times$ 6-Slave AXI4-Lite Crossbar Interconnect (`axi_interconnect_wrap_2x6`):
+  - Master Port `S00`: Driven by CPU BFM (`el2_veer_wrapper`).
+  - Master Port `S01`: Tied off (`0` / idle).
 * **Integrated Peripherals (6 Slaves):**
-  1. **UART (`M00`, `0x4000_0000`):** 16550-compatible serial UART with programmable baud rate generator and FIFO buffering.
-  2. **Hardware Timer (`M01`, `0x4000_4000`):** 64-bit real-time counter (`mtime`) with 64-bit comparator (`mtimecmp`), configurable prescaler, and interrupt generation.
-  3. **GPIO Controller (`M02`, `0x4000_2000`):** 32-bit bidirectional I/O based on OpenTitan with 2-stage input synchronizers, atomic bit operations (`SET`, `CLEAR`, `TOGGLE`), and edge/level interrupt generation.
-  4. **SPI Controller (`M03`, `0x4000_6000`):** Master-mode SPI controller supporting Mode 0 (CPOL=0, CPHA=0), 32-deep TX/RX FIFOs, and programmable clock ratio dividers.
-  5. **Seven-Segment Display Controller (`M04`, `0x4000_8000`):** 8-digit multiplexed hexadecimal display driver with programmable scan refresh divider, blanking mask, and decimal point support.
-  6. **PWM Generator (`M05`, `0x4000_A000`):** 8-bit duty-cycle motor drive generator with 256-cycle base period for precision speed and power regulation.
-* **Architectural Simplification:** Direct Memory Access (DMA) and I2C controllers have been completely excised from the SoC RTL, interconnect decoders, and active filelists, with M04 dedicated to the Seven-Segment Controller (`axi_seg7_top`).
-* **Multi-Tiered Verification:** Standalone unit testbenches (Icarus Verilog), standalone IEEE 1800.2 UVM test environments for PWM, SPI, and SEG7, SoC-level UVM integration environment, directed AXI SV testbench (`tb_smart_controlsoc_top.sv`), host-compiled firmware verification, and bare-metal RISC-V GCC firmware compilation.
+  1. **UART (`M00`, `0x4000_0000`):** Serial UART with TX/RX FIFOs, baud divisor, and interrupt support.
+  2. **Hardware Timer (`M01`, `0x4000_4000`):** 64-bit `mtime` counter and `mtimecmp` comparator with prescaler.
+  3. **GPIO Controller (`M02`, `0x4000_2000`):** 32-bit bidirectional GPIO with OpenTitan register bus and atomic SET/CLEAR/TOGGLE.
+  4. **SPI Controller (`M03`, `0x4000_6000`):** Master-mode SPI controller with 32-deep FIFOs and clock ratio divider.
+  5. **Seven-Segment Controller (`M04`, `0x4000_8000`):** 8-digit multiplexed 7-segment display driver (replaces legacy I2C).
+  6. **PWM Generator (`M05`, `0x4000_A000`):** 8-bit duty-cycle generator with 256-cycle base period.
+* **IP Scope:** DMA, I2C, and AES peripherals are completely excised from the SoC interconnect, top RTL, and active filelists.
 
 ---
 
@@ -37,14 +41,14 @@ At the core of the SoC is the Western Digital / CHIPS Alliance **VeeR EL2**, a d
 |                                             SMART CONTROLSOC TOP                                              |
 |                                                                                                               |
 |  +--------------------+         +--------------------------------------------------------------------------+  |
-|  |  RISC-V VeeR EL2   |  (S00)  |                                AXI4-Lite                                 |  |
-|  |     CPU (LSU)      | =======>|                            Interconnect (2x6)                            |  |
+|  |    CPU BFM Tasks   |  (S00)  |                                AXI4-Lite                                 |  |
+|  | (el2_veer_wrapper) | =======>|                            Interconnect (2x6)                            |  |
 |  +--------------------+         +--------------------------------------------------------------------------+  |
 |                                        ||          ||          ||          ||          ||          ||         |
 |  +--------------------+  (S01)         || (M00)    || (M01)    || (M02)    || (M03)    || (M04)    || (M05)   |
 |  |     [Tied Off]     | =======>       \/          \/          \/          \/          \/          \/         |
 |  |   (Zero Driven)    |         +----------++----------++----------++----------++----------++----------+      |
-|  +--------------------+         | AXI UART || AXI Timer|| AXI GPIO || AXI SPI  || AXI SEG7 || AXI PWM  |      |
+|  +--------------------+         | AXI UART || AXI Timer|| AXI GPIO || AXI SPI  || AXI Seg7 || AXI PWM  |      |
 |                                 +----------++----------++----------++----------++----------++----------+      |
 |                                      ||          ||          ||          ||          ||          ||           |
 +--------------------------------------||----------||----------||----------||----------||----------||-----------+
@@ -56,7 +60,7 @@ At the core of the SoC is the Western Digital / CHIPS Alliance **VeeR EL2**, a d
 
 | Master Port | Source Master | Functional Role |
 | :---: | :--- | :--- |
-| `S00` | RISC-V VeeR EL2 LSU | Primary CPU MMIO master interface |
+| `S00` | CPU BFM (`el2_veer_wrapper`) | Primary CPU MMIO master interface (drives `lsu_axi_*`) |
 | `S01` | Tied off (`0` / idle) | Unused secondary master port |
 
 | Slave Port | Peripheral | RTL Top Module | Base Address | Address Range | Decoded Size |
@@ -73,73 +77,83 @@ At the core of the SoC is the Western Digital / CHIPS Alliance **VeeR EL2**, a d
 ## 3. Peripheral Register Definitions
 
 ### 3.1 UART Controller (Base: `0x4000_0000`)
-| Offset | Register Name | Access | Description |
-| :---: | :--- | :---: | :--- |
-| `0x00` | `UART_RBR` / `UART_THR` | R / W | Receiver Buffer Register / Transmitter Holding Register |
-| `0x04` | `UART_IER` | R/W | Interrupt Enable Register |
-| `0x08` | `UART_BAUD_DIV` | R/W | Baud Rate Divisor Generator Register (e.g., 40 cycles/bit) |
-| `0x0C` | `UART_LCR` | R/W | Line Control Register (DLAB, Parity, Stop Bits, Word Length) |
-| `0x14` | `UART_LSR` | R | Line Status Register (Bit 0: Data Ready, Bit 5: TX Empty) |
+| Offset | Register Name | Width | Access | Reset Value | Description |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| `0x00` | `UART_RBR` | 8-bit | RO | `0x00` | Receiver Buffer Register (reads byte from RX FIFO when DLAB=0) |
+| `0x00` | `UART_THR` | 8-bit | WO | `0x00` | Transmitter Holding Register (pushes byte to TX FIFO when DLAB=0) |
+| `0x04` | `UART_IER` | 1-bit (`[0]`) | RW | `0x00` | Interrupt Enable Register (`uart_irq_en_int`, bit 0) |
+| `0x08` | `UART_BAUD_DIVISOR` | 32-bit | RW | `0x0000_0364` | Baud Rate Divisor (default: 100 MHz / 115200 = 868) |
+| `0x0C` | `UART_LCR` | 8-bit (`[7:0]`) | RW | `0x00` | Line Control Register: DLAB `[7]`, Parity Mode `[4]`, Parity En `[3]`, Stop Bits `[2]`, Word Length `[1:0]` |
+| `0x14` | `UART_LSR` | 7-bit (`[6:0]`) | RO | Dynamic | Line Status Register: TEMT (bit 6), THRE (bit 5), Data Ready (bit 0) |
 
 ### 3.2 Hardware Timer (Base: `0x4000_4000`)
-| Offset | Register Name | Access | Description |
-| :---: | :--- | :---: | :--- |
-| `0x000` | `ALERT_TEST` | WO | Alert test register (Write 1 to trigger alert test event) |
-| `0x004` | `TIMER_CTRL` | R/W | Timer Control (Bit 0: `active` counter enable) |
-| `0x100` | `TIMER_INTR_ENABLE0` | R/W | Timer Interrupt Enable Mask (Bit 0: Enable interrupt on compare match) |
-| `0x104` | `TIMER_INTR_STATE0` | W1C | Timer Interrupt Status (Bit 0: Interrupt pending flag; write 1 to clear) |
-| `0x108` | `TIMER_INTR_TEST0` | WO | Software Interrupt Test Force (Bit 0: Force interrupt for testing) |
-| `0x10C` | `TIMER_CFG0` | R/W | Timer Configuration (Bits [11:0]: Prescaler, Bits [23:16]: Step Value) |
-| `0x110` | `TIMER_V_LOWER0` | R/W | 64-bit Real-Time Counter `mtime` [31:0] |
-| `0x114` | `TIMER_V_UPPER0` | R/W | 64-bit Real-Time Counter `mtime` [63:32] |
-| `0x118` | `TIMER_COMPARE_LOWER0`| R/W | 64-bit Compare Threshold `mtimecmp` [31:0] |
-| `0x11C` | `TIMER_COMPARE_UPPER0`| R/W | 64-bit Compare Threshold `mtimecmp` [63:32] |
+| Offset | Register Name | Width | Access | Reset Value | Description |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| `0x000` | `REG_ALERT_TEST` | 32-bit | WO | `0x0000_0000` | Alert test register (reads 0) |
+| `0x004` | `REG_CTRL` | 1-bit (`[0]`) | RW | `0x0000_0000` | Timer Control (bit 0: `ctrl_active` counter enable) |
+| `0x100` | `REG_INTR_ENABLE0` | 1-bit (`[0]`) | RW | `0x0000_0000` | Timer Interrupt Enable (bit 0: `intr_enable`) |
+| `0x104` | `REG_INTR_STATE0` | 1-bit (`[0]`) | W1C | `0x0000_0000` | Timer Interrupt Status (bit 0: `intr_state`, write 1 to clear) |
+| `0x108` | `REG_INTR_TEST0` | 1-bit (`[0]`) | WO | `0x0000_0000` | Software Interrupt Force (write 1 to force `intr_state`, reads 0) |
+| `0x10C` | `REG_CFG0` | 24-bit (`[23:0]`) | RW | `0x0001_0000` | Timer Configuration (Prescaler `[11:0]` = 0, Step `[23:16]` = 1) |
+| `0x110` | `REG_TIMER_V_LOWER0` | 32-bit | RW | `0x0000_0000` | 64-bit Real-Time Counter `mtime` Lower 32 bits `[31:0]` |
+| `0x114` | `REG_TIMER_V_UPPER0` | 32-bit | RW | `0x0000_0000` | 64-bit Real-Time Counter `mtime` Upper 32 bits `[63:32]` |
+| `0x118` | `REG_COMPARE_LOWER0_0`| 32-bit | RW | `0xFFFF_FFFF` | 64-bit Compare Threshold `mtimecmp` Lower 32 bits `[31:0]` (write clears IRQ) |
+| `0x11C` | `REG_COMPARE_UPPER0_0`| 32-bit | RW | `0xFFFF_FFFF` | 64-bit Compare Threshold `mtimecmp` Upper 32 bits `[63:32]` (write clears IRQ) |
 
 ### 3.3 GPIO Controller (Base: `0x4000_2000`)
-| Offset | Register Name | Access | Description |
-| :---: | :--- | :---: | :--- |
-| `0x000` | `GPIO_INFO` | RO | Hardware Version (Bits 19:10 = 2) & Pin Count (Bits 9:0 = 32) -> `0x0000_0820` |
-| `0x004` | `GPIO_CFG` | R/W | Global Configuration (Bit 0: Global Interrupt Mode, Bit 1: Pin Sticky Mode) |
-| `0x008` | `GPIO_MODE_0` | R/W | IO Mode for Pins 0–15 (2 bits/pin: 0=Input, 1=Push-Pull, 2=OpenDrain0, 3=OpenDrain1) |
-| `0x00C` | `GPIO_MODE_1` | R/W | IO Mode for Pins 16–31 (2 bits/pin) |
-| `0x080` | `GPIO_EN` | R/W | Input Sampling Enable Mask for Pins 0–31 (1 = Sample Enabled) |
-| `0x100` | `GPIO_IN` | RO | Synchronized Pin Input State Read Register |
-| `0x180` | `GPIO_OUT` | R/W | Direct Output State Register |
-| `0x200` | `GPIO_SET` | WO | Atomic Output Bit Set Register (Write 1 to set corresponding pin) |
-| `0x280` | `GPIO_CLEAR` | WO | Atomic Output Bit Clear Register (Write 1 to clear corresponding pin) |
-| `0x300` | `GPIO_TOGGLE` | WO | Atomic Output Bit Toggle Register (Write 1 to invert corresponding pin) |
-| `0x380` | `GPIO_INTRPT_RISE_EN` | R/W | Rising Edge Interrupt Enable Mask |
-| `0x400` | `GPIO_INTRPT_FALL_EN` | R/W | Falling Edge Interrupt Enable Mask |
-| `0x480` | `GPIO_INTRPT_LVL_HIGH_EN` | R/W | Level-Sensitive High Interrupt Enable Mask |
-| `0x500` | `GPIO_INTRPT_LVL_LOW_EN` | R/W | Level-Sensitive Low Interrupt Enable Mask |
-| `0x580` | `GPIO_INTRPT_STATUS` | W1C | Aggregated Interrupt Status Register (Write 1 to clear) |
+| Offset | Register Name | Width | Access | Reset Value | Description |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| `0x000` | `GPIO_INFO` | 20-bit | RO | `0x0000_0820` | Version `[19:10]` = 2, Pin Count `[9:0]` = 32 |
+| `0x004` | `GPIO_CFG` | 2-bit | RW | `0x0000_0000` | Global Config (`pin_lvl_intrpt_mode` `[0]`, `glbl_intrpt_mode` `[1]`) |
+| `0x008` | `GPIO_GPIO_MODE_0` | 32-bit | RW | `0x0000_0000` | Pin mode for GPIO 0–15 (2 bits/pin: 0=In, 1=PushPull, 2=OpenDrain0, 3=OpenDrain1) |
+| `0x00C` | `GPIO_GPIO_MODE_1` | 32-bit | RW | `0x0000_0000` | Pin mode for GPIO 16–31 (2 bits/pin) |
+| `0x080` | `GPIO_GPIO_EN` | 32-bit | RW | `0x0000_0000` | Input sampling enable mask for pads `[31:0]` |
+| `0x100` | `GPIO_GPIO_IN` | 32-bit | RO | Live pins | Synchronized input state of GPIO pins `[31:0]` |
+| `0x180` | `GPIO_GPIO_OUT` | 32-bit | RW | `0x0000_0000` | Direct output register for GPIO pins `[31:0]` |
+| `0x200` | `GPIO_GPIO_SET` | 32-bit | WO | `0x0000_0000` | Atomic bit set: write 1 to set corresponding bits in `GPIO_OUT` (reads 0) |
+| `0x280` | `GPIO_GPIO_CLEAR` | 32-bit | WO | `0x0000_0000` | Atomic bit clear: write 1 to clear corresponding bits in `GPIO_OUT` (reads 0) |
+| `0x300` | `GPIO_GPIO_TOGGLE` | 32-bit | WO | `0x0000_0000` | Atomic bit toggle: write 1 to invert corresponding bits in `GPIO_OUT` (reads 0) |
+| `0x380` | `GPIO_INTRPT_RISE_EN` | 32-bit | RW | `0x0000_0000` | Rising edge interrupt enable mask `[31:0]` |
+| `0x400` | `GPIO_INTRPT_FALL_EN` | 32-bit | RW | `0x0000_0000` | Falling edge interrupt enable mask `[31:0]` |
+| `0x480` | `GPIO_INTRPT_LVL_HIGH_EN` | 32-bit | RW | `0x0000_0000` | High level interrupt enable mask `[31:0]` |
+| `0x500` | `GPIO_INTRPT_LVL_LOW_EN` | 32-bit | RW | `0x0000_0000` | Low level interrupt enable mask `[31:0]` |
+| `0x580` | `GPIO_INTRPT_STATUS` | 32-bit | W1C | `0x0000_0000` | Aggregated interrupt status `[31:0]` (write 1 to clear) |
+| `0x600` | `GPIO_INTRPT_RISE_STATUS` | 32-bit | W1C | `0x0000_0000` | Rising edge interrupt status `[31:0]` (write 1 to clear) |
+| `0x680` | `GPIO_INTRPT_FALL_STATUS` | 32-bit | W1C | `0x0000_0000` | Falling edge interrupt status `[31:0]` (write 1 to clear) |
+| `0x700` | `GPIO_INTRPT_LVL_HIGH_STATUS`| 32-bit | W1C | `0x0000_0000` | High level interrupt status `[31:0]` (write 1 to clear) |
+| `0x780` | `GPIO_INTRPT_LVL_LOW_STATUS` | 32-bit | W1C | `0x0000_0000` | Low level interrupt status `[31:0]` (write 1 to clear) |
 
 ### 3.4 SPI Controller (Base: `0x4000_6000`)
-| Offset | Register Name | Access | Reset Value | Description |
-| :---: | :--- | :---: | :---: | :--- |
-| `0x1C` | `SPI_GIER` | R/W | `0x0000_0000` | Global Interrupt Enable Register (Bit 31: Global Enable) |
-| `0x20` | `SPI_ISR` | R/W1C | `0x0000_0000` | Interrupt Status Register |
-| `0x28` | `SPI_IER` | R/W | `0x0000_0000` | Interrupt Enable Register |
-| `0x30` | `SPI_RCLK` | R/W | `0x0000_0004` | Clock ratio register (divider between system clock and SPI SCK) |
-| `0x40` | `SPI_SRR` | WO | `0x0000_0000` | Software Reset Register (write `0x0000_000A` to reset core) |
-| `0x60` | `SPI_CR` | R/W | `0x0000_0180` | Control Register (Master Mode, Enable, Mode 0: CPOL=0, CPHA=0) |
-| `0x64` | `SPI_SR` | RO | `0x0000_00A5` | Status Register (TX/RX FIFO Empty and Full Flags) |
-| `0x68` | `SPI_DTR` | WO | `0x0000_0000` | Data Transmit Register (Pushes byte into TX FIFO) |
-| `0x6C` | `SPI_DRR` | RO | `0x0000_0000` | Data Receive Register (Pops byte from RX FIFO) |
-| `0x70` | `SPI_SSR` | R/W | `0xFFFF_FFFF` | Slave Select Register (active-low chip select) |
+| Offset | Register Name | Width | Access | Reset Value | Description |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| `0x1C` | `SPI_GIER` | 32-bit | RW | `0x0000_0000` | Global Interrupt Enable Register (bit 31: GIE) |
+| `0x20` | `SPI_ISR` | 32-bit | W1C/toggle | `0x0000_0000` | Interrupt Status Register |
+| `0x28` | `SPI_IER` | 32-bit | RW | `0x0000_0000` | Interrupt Enable Register |
+| `0x30` | `SPI_RCLK` | 3-bit (`[2:0]`) | RW | `0x0000_0004` | Ratio Clock Prescaler Register (system clock to SCK divider ratio) |
+| `0x40` | `SPI_SRR` | 32-bit | WO | `0x0000_0000` | Software Reset Register (write `0x0000_000A` to trigger soft reset) |
+| `0x60` | `SPI_CR` | 32-bit | RW | `0x0000_0180` | Control: LSB 1st `[9]`, RX FIFO rst `[6]`, TX FIFO rst `[5]`, CPHA `[4]`, CPOL `[3]`, Master `[2]`, Enable `[1]` |
+| `0x64` | `SPI_SR` | 32-bit | RO | `0x0000_00A5` | Status: SMOD `[5]`, MODF `[4]`, TX Full `[3]`, TX Empty `[2]`, RX Full `[1]`, RX Empty `[0]` |
+| `0x68` | `SPI_DTR` | 8-bit (`[7:0]`) | WO | `0x0000_0000` | Data Transmit Register (pushes byte into TX FIFO) |
+| `0x6C` | `SPI_DRR` | 8-bit (`[7:0]`) | RO | `0x0000_0000` | Data Receive Register (pops byte from RX FIFO) |
+| `0x70` | `SPI_SSR` | 32-bit | RW | `0xFFFF_FFFF` | Slave Select Register (bit 0: active-low slave select) |
+| `0x74` | `SPI_TFOR` | 32-bit | RO | `0x0000_0000` | TX FIFO Occupancy Register |
+| `0x78` | `SPI_RFOR` | 32-bit | RO | `0x0000_0000` | RX FIFO Occupancy Register |
 
 ### 3.5 Seven-Segment Controller (Base: `0x4000_8000`)
-| Offset | Register Name | Access | Reset Value | Description |
-| :---: | :--- | :---: | :---: | :--- |
-| `0x00` | `SEG_DATA` | R/W | `0x0000_0000` | 8 nibbles. Digit $n$ is stored in bits $[4n+3:4n]$. Digit 0 = $[3:0]$ |
-| `0x04` | `SEG_CTRL` | R/W | `0x0000_FF06` | Display control: [0] EN, [1] SEG_ACTIVE_LOW, [2] AN_ACTIVE_LOW, [15:8] DIGIT_MASK |
-| `0x08` | `SEG_DP` | R/W | `0x0000_0000` | Decimal point enable mask per digit (1 = DP active) |
-| `0x0C` | `SEG_REFRESH_DIV` | R/W | `0x0000_03E8` | 16-bit clock divisor for digit multiplex scan rate (default: 1000 clocks) |
+| Offset | Register Name | Width | Access | Reset Value | Description |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| `0x00` | `SEG_DATA` | 32-bit | RW | `0x0000_0000` | 8 nibbles: digit $n$ in bits `[4n+3:4n]`. Digit 0 = bits `[3:0]` |
+| `0x04` | `SEG_CTRL` | 16-bit | RW | `0x0000_FF06` | Enable `[0]`, SEG polarity `[1]`, AN polarity `[2]`, Digit mask `[15:8]` (FF = all 8 digits enabled) |
+| `0x08` | `SEG_DP` | 8-bit (`[7:0]`) | RW | `0x0000_0000` | Decimal point enable mask per digit (bit $n$ controls DP on digit $n$) |
+| `0x0C` | `SEG_REFRESH_DIV` | 16-bit | RW | `0x0000_03E8` | Clock divider for multiplexed digit scanning (default: 1000 cycles) |
 
 ### 3.6 PWM Generator (Base: `0x4000_A000`)
-| Offset | Register Name | Access | Reset Value | Description |
-| :---: | :--- | :---: | :---: | :--- |
-| `0x00` | `PWM_DUTY_REG` | R/W | `0x0000_0000` | 8-bit duty cycle register (`pwm_counter < duty_cycle`). `0x00` = 0%, `0x80` = 50%, `0xFF` = 255/256 (99.6%) |
+| Offset | Register Name | Width | Access | Reset Value | Description |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| `0x00` | `slv_reg0` / `PWM_DUTY` | 32-bit (`[7:0]` duty) | RW | `0x0000_0000` | 8-bit duty cycle (`pwm_counter < duty_cycle`). Base period = 256 cycles. |
+| `0x04` | `slv_reg1` | 32-bit | RW | `0x0000_0000` | General-purpose read/write scratch register |
+| `0x08` | `slv_reg2` | 32-bit | RW | `0x0000_0000` | General-purpose read/write scratch register |
+| `0x0C` | `slv_reg3` | 32-bit | RW | `0x0000_0000` | General-purpose read/write scratch register |
 
 ---
 
@@ -147,100 +161,77 @@ At the core of the SoC is the Western Digital / CHIPS Alliance **VeeR EL2**, a d
 
 ```
 Smart_Motor_Control_SoC/
-├── doc/                                   # Specifications, test plans, and architectural status
-│   ├── spec/                              # Peripheral and memory map specifications
-│   │   ├── memory_map_final.md            # Final authoritative memory map
-│   │   └── seg7_spec.md                   # Seven-Segment controller specification
-│   ├── Smart_ControlSoC_Testplan.csv      # Complete 29-test verification test plan
-│   ├── PROJECT_EXECUTION_STATUS.md        # Autonomous phase execution status
-│   └── FINAL_PROJECT_STATUS.md            # Final comprehensive project report
+├── doc/                                   # Specifications, test plans, execution status
+│   ├── PROJECT_EXECUTION_STATUS.md        # Autonomous phase execution tracking
+│   ├── FINAL_PROJECT_STATUS.md            # Comprehensive project verification report
+│   └── Smart_ControlSoC_Testplan.csv      # Verification test plan
 ├── rtl/
-│   ├── Cores-VeeR-EL2/                    # RISC-V VeeR EL2 core repository & BFM wrapper
+│   ├── Cores-VeeR-EL2/                    # VeeR EL2 core repository & active BFM wrapper
+│   │   ├── el2_veer_wrapper.v             # Authoritative CPU BFM wrapper (cpu_write/cpu_read)
+│   │   └── design/                        # Synthesizable VeeR RTL (deferred/experimental)
 │   ├── interconnect/                      # AXI4-Lite 2x6 Crossbar Interconnect
 │   ├── uart_directory/                    # AXI4-Lite UART IP Core (Port M00)
 │   ├── timer_directory/                   # 64-bit Hardware Timer IP Core (Port M01)
 │   ├── gpio_directory/                    # OpenTitan Bidirectional GPIO IP Core (Port M02)
 │   ├── spi_directory/                     # AXI4-Lite SPI Master IP Core (Port M03)
-│   ├── seg7_directory/                    # Seven-Segment Display Controller IP Core (Port M04)
+│   ├── seg7_directory/                    # Seven-Segment Display IP Core (Port M04)
 │   ├── pwm_directory/                     # AXI4-Lite PWM Generator IP Core (Port M05)
 │   └── smart_controlsoc_top.v             # Top-Level SoC Integration Module
-├── sw/                                    # Bare-metal C software stack and drivers
-│   ├── app/
-│   │   └── main.c                         # Top-level SoC firmware application
-│   ├── bsp/
-│   │   ├── link.ld                        # RISC-V bare-metal linker script
-│   │   └── startup.S                      # Boot assembly, trap vectors, stack setup
-│   ├── drivers/                           # Modular peripheral drivers
-│   │   ├── gpio.h / gpio.c
-│   │   ├── pwm.h / pwm.c
-│   │   ├── seg7.h / seg7.c
-│   │   ├── spi.h / spi.c
-│   │   ├── timer.h / timer.c
-│   │   └── uart.h / uart.c
-│   ├── Makefile                           # Automated GCC compilation pipeline
-│   ├── soc_memory_map.h                   # C MMIO header definitions
-│   └── main1.c                            # 8-suite host & simulation verification test
+├── sw/                                    # Bare-metal C verification and MMIO headers
+│   ├── soc_memory_map.h                   # Authoritative C MMIO definitions
+│   └── main1.c                            # 8-suite MMIO verification program
 ├── tb/
-│   ├── uvm/                               # UVM Verification Environments
-│   │   ├── common/axi_lite/               # Common reusable AXI4-Lite Master VIP
-│   │   ├── pwm/                           # Standalone PWM UVM environment (13 tests)
-│   │   ├── spi/                           # Standalone SPI UVM environment (13 tests)
-│   │   ├── seg7/                          # Standalone SEG7 UVM environment (8 tests)
-│   │   └── soc/                           # System-Level SoC UVM environment (11 tests)
-│   ├── seg7.vip_uvm_tb/                   # Original SEG7 UVM testbench
-│   └── tb_smart_controlsoc_top.sv         # System-Level Directed Verification Testbench (Tests 1–12)
+│   ├── tb_smart_controlsoc_top.sv         # System-Level Directed SoC Testbench (Tests 1–12 & main1.hex)
+│   ├── tb_smart_controlsoc_veer_top.sv    # Experimental synthesizable VeeR testbench
+│   ├── soc_uvm/                           # SoC-Level UVM Environment (filelist_soc_uvm.f, tb_soc_uvm_top.sv)
+│   ├── uvm/                               # Modular Standalone UVM Testbenches
+│   │   ├── seg7/                          # Standalone SEG7 UVM (tb_seg7_top.sv, 7 tests)
+│   │   ├── pwm/                           # Standalone PWM UVM (tb_pwm_top.sv, 4 tests)
+│   │   ├── spi/                           # Standalone SPI UVM (tb_spi_top.sv, 6 tests)
+│   │   └── soc/                           # Alternative SoC UVM suite (3 tests)
+│   └── *.vip_uvm_tb/                      # Peripheral VIP directories (gpio, pwm, spi, uart, i2c legacy)
 ├── main1.hex                              # 6-peripheral MMIO simulation trace file
 ├── filelist.f                             # Unified RTL simulation filelist
-├── run_regression.sh                      # Master regression test runner
-├── run_soc_uvm.sh                         # SoC UVM runner
-├── run_seg7_uvm.sh                        # SEG7 UVM runner
-├── run_pwm_uvm.sh                         # PWM UVM runner
-├── run_spi_uvm.sh                         # SPI UVM runner
 └── README.md                              # This file
 ```
 
 ---
 
-## 5. Verification Framework & Methodology
+## 5. Verification Suites in `tb/`
 
-The verification strategy follows a hierarchical multi-tier approach:
+### 5.1 Directed SoC Testbench (`tb/tb_smart_controlsoc_top.sv`)
+Executes the 73-transaction `main1.hex` trace by default, and optional directed tests 1–12 via `+RUN_ALL_TESTS`:
+* **Test 1:** Default reset state verification across all 6 peripherals.
+* **Test 2:** UART Baud rate divisor and Line Control Register configuration.
+* **Test 3:** UART single character transmission and baud timing capture.
+* **Test 4:** UART multi-byte burst transmission (`"RISCV"` string).
+* **Test 5:** UART external RX injection and interrupt assertion / clearing.
+* **Test 6:** UART full-duplex simultaneous transmit and receive operation.
+* **Test 7:** SPI Controller reset, Mode 0 configuration, and transmission verification.
+* **Test 8:** PWM Generator duty cycle programming (50%) and pin toggle verification.
+* **Test 9:** Seven-Segment Display Controller MMIO read/write and scan multiplex verification.
+* **Test 10:** GPIO direct output, atomic set/clear/toggle, input sampling, and edge interrupt test.
+* **Test 11:** 64-bit Hardware Timer prescaler, counter progression, compare interrupt, and W1C test.
+* **Test 12:** Concurrent Multi-Peripheral Stress Test (interleaved access across all 6 peripherals).
 
-```
-[Tier 1: Standalone Unit RTL]  ==>  Icarus Verilog testbenches (sim_seg7, sim_spi, sim_pwm: 188 PASS)
-[Tier 2: Standalone UVM VIP]   ==>  IEEE 1800.2 UVM environments for PWM, SPI, and SEG7
-[Tier 3: SoC-Level UVM]        ==>  Virtual sequences orchestrating multi-peripheral scenarios
-[Tier 4: Directed SoC SV]      ==>  tb_smart_controlsoc_top.sv streaming main1.hex and Tests 1–12
-[Tier 5: Bare-Metal Firmware]  ==>  RISC-V GCC compiled ELF/HEX executed on VeeR EL2
-```
+### 5.2 SoC-Level UVM Verification (`tb/soc_uvm/`)
+* `soc_test`: Default integration smoke test.
+* `uart_connectivity_test`: UART MMIO and loopback verification.
+* `gpio_test`: GPIO MMIO and pin sampling verification.
+* `spi_test`: SPI transfer and register verification.
+* `pwm_test`: PWM duty cycle verification.
 
-### 5.1 Directed SoC Testbench Tests (`tb_smart_controlsoc_top.sv`)
-* **TEST 1:** Reset and default pin state verification across all peripherals.
-* **TEST 2:** UART Baud rate divisor and Line Control Register configuration.
-* **TEST 3:** UART single character transmission and baud timing capture.
-* **TEST 4:** UART multi-byte burst transmission (`"RISCV"` string).
-* **TEST 5:** UART external RX injection and interrupt assertion / clearing.
-* **TEST 6:** UART full-duplex simultaneous transmit and receive operation.
-* **TEST 7:** SPI Controller reset, Mode 0 configuration, and transmission verification.
-* **TEST 8:** PWM Generator duty cycle programming (50%) and pin toggle verification.
-* **TEST 9:** Seven-Segment Display Controller MMIO read/write and scan multiplex verification.
-* **TEST 10:** GPIO direct output, atomic set/clear/toggle, input sampling, and edge interrupt test.
-* **TEST 11:** 64-bit Hardware Timer prescaler, counter progression, compare interrupt, and W1C test.
-* **TEST 12:** Concurrent Multi-Peripheral Stress Test (interleaved access across all 6 peripherals).
+### 5.3 Standalone UVM Testbenches (`tb/uvm/`)
+* **Seven-Segment Display (`tb/uvm/seg7/`):** `seg7_base_test`, `seg7_hex_display_test`, `seg7_scan_mask_test`, `seg7_polarity_test`, `seg7_dp_control_test`, `seg7_refresh_boundary_test`, `seg7_full_hex_sweep_test`.
+* **PWM Generator (`tb/uvm/pwm/`):** `pwm_base_test`, `pwm_duty_cycle_test`, `pwm_period_test`, `pwm_random_test`.
+* **SPI Controller (`tb/uvm/spi/`):** `spi_base_test`, `spi_loopback_test`, `spi_fifo_threshold_test`, `spi_mode_transfer_test`, `spi_interrupt_test`, `spi_random_test`.
+* **Alternative SoC Suite (`tb/uvm/soc/`):** `soc_base_test`, `soc_reg_access_test`, `soc_peripheral_concurrent_test`.
 
 ---
 
-## 6. Simulation & Build Commands
+## 6. Simulation Commands
 
-### 6.1 Building the Bare-Metal RISC-V Firmware
-```bash
-# Build firmware ELF, BIN, HEX, and assembly disassembly
-make -C sw
-
-# Clean firmware artifacts
-make -C sw clean
-```
-
-### 6.2 Running Standalone Unit Tests (Icarus Verilog)
+### 6.1 Running Standalone Unit Tests (Icarus Verilog)
 ```bash
 # Run UART Controller unit testbench (20 tests)
 iverilog -g2012 -Irtl/uart_directory/include rtl/uart_directory/rtl/*.v rtl/uart_directory/tb/tb_axi_uart_top.v -o sim_uart && vvp ./sim_uart
@@ -255,43 +246,27 @@ vvp ./sim_spi
 vvp ./sim_pwm
 ```
 
-### 6.3 Running Host-Native C Firmware Check
+### 6.2 Running Host-Native C Firmware Check
 ```bash
 gcc -DSIMULATION_HOST -Isw sw/main1.c -o sim_main1
 ./sim_main1
 ```
 
-### 6.4 Running Master Regression Suite
+### 6.3 Running UVM Simulations (Synopsys VCS / QuestaSim)
 ```bash
-# Execute full automated regression suite across all available tools
-chmod +x ./run_regression.sh
-./run_regression.sh
-```
-
-### 6.5 Running UVM Simulations (Synopsys VCS / Questa)
-```bash
-# Standalone PWM UVM Environment (13 tests available)
+# Standalone PWM UVM Environment
 ./run_pwm_uvm.sh pwm_random_test
 
-# Standalone SPI UVM Environment (13 tests available)
+# Standalone SPI UVM Environment
 ./run_spi_uvm.sh spi_random_test
 
-# Standalone SEG7 UVM Environment (8 tests available)
+# Standalone SEG7 UVM Environment
 ./run_seg7_uvm.sh seg7_random_test
 
-# SoC-Level System UVM Environment (11 tests available)
+# SoC-Level System UVM Environment
 ./run_soc_uvm.sh soc_all_periph_test
 ```
 
-### 6.6 Experimental VeeR EL2 Core Integration Branch (Deferred / Not Dynamically Verified)
+### 6.4 Experimental VeeR EL2 Synthesizable Branch (Deferred / Not Dynamically Verified)
 > [!NOTE]
 > The authoritative project implementation is the BFM-based SoC (`smart_controlsoc_top`). Full synthesizable core integration is an exploratory branch (`smart_controlsoc_veer_top`) deferred from the current milestone and classified as **EXPERIMENTAL / IMPLEMENTED / NOT DYNAMICALLY VERIFIED**. All peripheral verification remains anchored to `smart_controlsoc_top`.
-
-```bash
-# Compile bare-metal firmware targeting VeeR EL2 reset vector 0xEE00_0000 (Experimental)
-make -C sw veer
-
-# Run Verilator lint check on synthesizable LSU width adapter
-verilator --lint-only -Wall rtl/interconnect/axi_lsu_dwidth_adapter.v
-```
-
