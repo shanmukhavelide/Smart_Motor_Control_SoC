@@ -4,8 +4,8 @@
 
 [![Architecture](https://img.shields.io/badge/Architecture-CPU%20BFM%20%2B%206%20Peripherals-blue.svg)](#)
 [![Interconnect](https://img.shields.io/badge/Interconnect-AXI4--Lite%20(2x6)-orange.svg)](#)
-[![Verification](https://img.shields.io/badge/Simulation-Synopsys%20VCS%20%2F%20Verdi%20%2F%20Icarus-purple.svg)](#)
-[![Status](https://img.shields.io/badge/Project%20Status-Authoritative%20BFM%20SoC-brightgreen.svg)](#)
+[![Verification](https://img.shields.io/badge/Simulation-VCS%20%7C%20Questa%20%7C%20Icarus%20(supported%20flows)-purple.svg)](#)
+[![Status](https://img.shields.io/badge/Project%20Status-Integration%20Complete%2C%20Re--verification%20Pending-yellow.svg)](#)
 
 ---
 
@@ -13,11 +13,11 @@
 
 The **Smart Motor Control SoC** (`smart_controlsoc_top` in `rtl/smart_controlsoc_top.v`) is a peripheral-oriented System-on-Chip (SoC) designed for real-time motor control, embedded display driving, and multi-protocol industrial communication.
 
-### Authoritative CPU Architecture & Memory Reality
+### CPU Architecture
 * **CPU Implementation (`el2_veer_wrapper.v`):** The authoritative SoC architecture uses a **Behavioral Bus Functional Model (BFM)** for the CPU master (`rtl/Cores-VeeR-EL2/el2_veer_wrapper.v`). It is **not** an active synthesizable processor pipeline.
 * **CPU Memory Reality:** The wrapper contains **zero internal memory** (0 bytes ICCM, 0 bytes DCCM, no cache, and no internal SRAM).
 * **Bus Transactions:** Transactions are generated behaviorally using `cpu_write(addr, data, strb)` and `cpu_read(addr, data)` tasks that directly drive the AXI4-Lite Load-Store Unit (`lsu_axi_*`) master interface on interconnect port `S00`. The instruction-fetch (`ifu_axi_*`), system bus (`sb_axi_*`), DMA slave (`dma_axi_*`), and CPU interrupt lines are tied off (`0`/`idle`).
-* **Synthesizable VeeR Integration Status:** A synthesizable VeeR EL2 core top (`smart_controlsoc_veer_top`) exists as a separate experimental branch and is classified as **EXPERIMENTAL / IMPLEMENTED / NOT DYNAMICALLY VERIFIED**.
+* **Synthesizable VeeR Integration Status:** A synthesizable VeeR EL2 core top (`smart_controlsoc_veer_top`) exists in this repo (`filelist_veer.f`, `tb/tb_smart_controlsoc_veer_top.sv`) and is classified as **EXPERIMENTAL / IMPLEMENTED / NOT DYNAMICALLY VERIFIED**.
 
 ### Key Architectural Highlights
 * **Bus Interconnect:** 2-Master $\times$ 6-Slave AXI4-Lite Crossbar Interconnect (`axi_interconnect_wrap_2x6`):
