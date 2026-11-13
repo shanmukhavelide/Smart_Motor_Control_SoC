@@ -206,7 +206,7 @@ Results will be added here with tool, date and log link once re-run.
 ## 5. Verification Suites in `tb/`
 
 ### 5.1 Directed SoC Testbench (`tb/tb_smart_controlsoc_top.sv`)
-Executes the 73-transaction `main1.hex` trace by default, and optional directed tests 1–12 via `+RUN_ALL_TESTS`:
+Executes the 59-transaction `main1.hex` trace by default, and optional directed tests 1–12 via `+RUN_ALL_TESTS`:
 * **Test 1:** Default reset state verification across all 6 peripherals.
 * **Test 2:** UART Baud rate divisor and Line Control Register configuration.
 * **Test 3:** UART single character transmission and baud timing capture.
