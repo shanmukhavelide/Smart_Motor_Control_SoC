@@ -31,18 +31,18 @@ All deliverables spanning **Phases 0 through 8** of the master autonomous projec
 
 | Interconnect Port | Peripheral Subsystem | Top RTL Module | Base Address | Address Space | Verification Status |
 | :---: | :--- | :--- | :---: | :---: | :---: |
-| `M00` | UART Controller | `axi_uart_top` | `0x4000_0000` | 4 KB | **SIMULATION PASSED** (20/20 Standalone Unit, C Driver) |
-| `M01` | 64-bit Hardware Timer | `axi_timer_top` | `0x4000_4000` | 4 KB | **SIMULATION PASSED** (Test 11, C Driver) |
-| `M02` | 32-bit OpenTitan GPIO | `axi_gpio_top` | `0x4000_2000` | 4 KB | **SIMULATION PASSED** (Test 10, C Driver) |
-| `M03` | SPI Master Controller | `axi_spi_top` | `0x4000_6000` | 4 KB | **SIMULATION PASSED** (119/119 Unit, Test 7) |
-| `M04` | Seven-Segment Display | `axi_seg7_top` | `0x4000_8000` | 4 KB | **SIMULATION PASSED** (41/41 Unit, Test 9) |
-| `M05` | 8-bit PWM Generator | `myip_v1_0` | `0x4000_A000` | 4 KB | **SIMULATION PASSED** (28/28 Unit, Test 8) |
+| `M00` | UART Controller | `axi_uart_top` | `0x4000_0000` | 4 KB | **SIMULATION PASSED** (UART unit test 20/20, Icarus Verilog) |
+| `M01` | 64-bit Hardware Timer | `axi_timer_top` | `0x4000_4000` | 4 KB | **Not verified** (Not run (needs full-SoC simulator)) |
+| `M02` | 32-bit OpenTitan GPIO | `axi_gpio_top` | `0x4000_2000` | 4 KB | **Not verified** (Not run (needs full-SoC simulator)) |
+| `M03` | SPI Master Controller | `axi_spi_top` | `0x4000_6000` | 4 KB | **Reported, not yet reproduced** (119/119 Unit; Test 7: Not run (needs full-SoC simulator)) |
+| `M04` | Seven-Segment Display | `axi_seg7_top` | `0x4000_8000` | 4 KB | **Reported, not yet reproduced** (41/41 Unit; Test 9: Not run (needs full-SoC simulator)) |
+| `M05` | 8-bit PWM Generator | `myip_v1_0` | `0x4000_A000` | 4 KB | **Reported, not yet reproduced** (28/28 Unit; Test 8: Not run (needs full-SoC simulator)) |
 
 ---
 
 ## 3. Verification Deliverables & Results
 
-### 3.1 Standalone Unit-Level Verification (Icarus Verilog) — SIMULATION PASSED
+### 3.1 Standalone Unit-Level Verification (Icarus Verilog) — UART 20/20 PASSED / SPI, SEG7, PWM Reported, Not Yet Reproduced
 Executed with `iverilog` / `vvp`:
 - **UART Controller (`tb_axi_uart_top.v`):** **20 PASS, 0 FAIL**
   - Reset outputs and initial line state deassertion (awready, wready, bvalid, arready, rvalid deasserted; tx_idle asserted).
@@ -57,18 +57,18 @@ Executed with `iverilog` / `vvp`:
   - Multi-byte TX FIFO streaming (`0x11`, `0x22`, `0x33`).
   - **Implementation Note:** Only `rtl/uart_directory/tb/tb_axi_uart_top.v` was modified. Corrected AXI handshake protocol sequencing (maintaining valid/ready signals until handshakes complete) and fixed Verilog 3-bit localparam shift truncation in register address definitions (`5'dX << 2`). UART RTL remained completely untouched.
   - **Simulation Command:** `iverilog -g2012 -Irtl/uart_directory/include rtl/uart_directory/rtl/*.v rtl/uart_directory/tb/tb_axi_uart_top.v -o sim_uart && vvp sim_uart`
-- **Seven-Segment Controller (`sim_seg7`):** **41 PASS, 0 FAIL**
+- **Seven-Segment Controller (`sim_seg7`):** **Reported, not yet reproduced** (41 PASS, 0 FAIL in previous log)
   - Reset outputs and default register readbacks.
   - Full and partial `wstrb` byte writes, staggered AW/W handshakes, undefined address handling.
   - All 16 hex glyphs (0x0–0xF) across all 8 digit positions.
   - Decimal point mask (0xA5, 0xFF) and dynamic digit masking (0x5A, 0x08).
   - Active-high and active-low polarity permutations for segments and anodes.
   - Mid-operation reset recovery.
-- **SPI Master Controller (`sim_spi`):** **119 PASS, 0 FAIL**
+- **SPI Master Controller (`sim_spi`):** **Reported, not yet reproduced** (119 PASS, 0 FAIL in previous log)
   - Mode 0 serial transfers, clock divisor configurations, FIFO depths, and status registers.
-- **PWM Generator (`sim_pwm`):** **28 PASS, 0 FAIL**
+- **PWM Generator (`sim_pwm`):** **Reported, not yet reproduced** (28 PASS, 0 FAIL in previous log)
   - Baseline duty cycles (0%, 25%, 50%, 75%, 99.6%), dynamic sweeps, and counter rollover without glitches.
-- **Total Unit Test Passes:** **208 PASS, 0 FAIL (100%)**
+- **Total Unit Test Status:** **20 PASS (Reproduced: UART) / 188 Reported, not yet reproduced (SEG7 41, SPI 119, PWM 28)**
 
 ### 3.2 UVM Verification Environments Delivered — IMPLEMENTED / BLOCKED (Dynamic Sim)
 1. **Common AXI-Lite VIP (`tb/uvm/common/axi_lite/`):**
@@ -84,8 +84,8 @@ Executed with `iverilog` / `vvp`:
 *Note: Dynamic execution of UVM testbenches is BLOCKED by external Synopsys VCS license server unavailability on this host.*
 
 ### 3.3 Software & Firmware Subsystem Delivered
-1. **Host-Native Verification Test (`sw/main1.c`) — SIMULATION PASSED:**
-   - Executed with `gcc -DSIMULATION_HOST`: **36/36 subtests PASSED** across all 6 peripherals.
+1. **Host-Native Verification Test (`sw/main1.c`) — PASSED (mock MMIO, does not exercise RTL):**
+   - Executed with `gcc -DSIMULATION_HOST`: **36/36 subtests PASSED** (mock MMIO, does not exercise RTL).
 2. **Modular Peripheral Drivers (`sw/drivers/`):**
    - `uart.h` / `uart.c`, `timer.h` / `timer.c`, `gpio.h` / `gpio.c`, `spi.h` / `spi.c`, `pwm.h` / `pwm.c`, `seg7.h` / `seg7.c`.
 3. **Bare-Metal RISC-V Firmware Build (`sw/app/main.c`, `sw/bsp/`) — STATIC CHECK PASSED:**
